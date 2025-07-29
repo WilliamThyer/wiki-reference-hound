@@ -1,0 +1,26 @@
+Wikipedia Dead Links Report Summary
+========================================
+
+Generated: 2025-07-22 15:24:56
+Total articles with dead links: 2
+Total dead links found: 7
+Note: 1 links returned 403 (likely blocking bots)
+
+Status Code Breakdown:
+--------------------
+404: 6
+403 (Bot Blocked): 1
+
+Articles with Dead Links:
+-------------------------
+
+Malcolm-Jamal Warner (6 dead links):
+  - https://www.blackfilm.com/read/exclusive-malcolm-jamal-warner-talks-tnt-major-crimes/ (Status: 403)
+  - http://data.bibliotheken.nl/id/thes/p073262897 (Status: 404)
+  - https://www.essence.com/news_entertainment/entertainment/articles/flashback_fridays_malcolm_jamal_warner/ (Status: 404)
+  - http://tvline.com/2015/05/13/american-crime-story-malcolm-jamal-warner-al-cowlings/ (Status: 404)
+  - https://id.worldcat.org/fast/228316 (Status: 404)
+  - http://www.people.com/people/archive/article/0,,20127316,00.html (Status: 404)
+
+Michelle Thomas (1 dead links):
+  - http://www.talentedteens.com/our_proud_history.htm (Status: 404)

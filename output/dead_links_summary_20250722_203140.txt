@@ -1,0 +1,35 @@
+Wikipedia Dead Links Report Summary
+========================================
+
+Generated: 2025-07-22 20:31:40
+Total articles with dead links: 3
+Total dead links found: 14
+
+Status Code Breakdown:
+--------------------
+405: 7
+404: 5
+401: 2
+
+Articles with Dead Links:
+-------------------------
+
+Malcolm-Jamal Warner (3 dead links):
+  - http://tvline.com/2015/05/13/american-crime-story-malcolm-jamal-warner-al-cowlings/ (Status: 404)
+  - https://www.essence.com/news_entertainment/entertainment/articles/flashback_fridays_malcolm_jamal_warner/ (Status: 404)
+  - http://www.people.com/people/archive/article/0,,20127316,00.html (Status: 404)
+
+Michelle Thomas (1 dead links):
+  - http://www.talentedteens.com/our_proud_history.htm (Status: 404)
+
+Scottie Scheffler (10 dead links):
+  - https://www.wsj.com/sports/olympics/scottie-scheffler-olympic-golf-jon-rahm-tommy-fleetwood-32d5aabe?mod=hp_major_pos3 (Status: 401)
+  - https://www.skysports.com/golf/news/12176/13105831/houston-open-scottie-schefflers-win-streak-ends-as-stephan-jaeger-lands-first-pga-tour-title (Status: 405)
+  - https://www.skysports.com/golf/live-blog/14640/12900853/us-open-2023-live-latest-news-and-updates-as-scottie-scheffler-jon-rahm-and-rory-mcilroy-all-feature (Status: 405)
+  - https://www.skysports.com/golf/news/12176/12594637/zurich-classic-scottie-scheffler-taking-perspective-from-early-struggles-after-masters-win (Status: 405)
+  - https://www.usatoday.com/story/sports/golf/2022/03/29/column-schefflers-desire-to-compete-takes-him-to-the-top/49997601/ (Status: 404)
+  - https://www.wsj.com/sports/golf/scottie-scheffler-arrested-pga-championship-video-633dab6c (Status: 401)
+  - https://www.skysports.com/golf/news/12176/13144958/scottie-scheffler-charges-dropped-against-world-no-1-golfer-after-pga-championship-arrest (Status: 405)
+  - https://www.skysports.com/golf/news/12176/13143779/charles-schwab-challenge-davis-riley-takes-maiden-individual-pga-tour-title-on-sombre-day-at-colonial (Status: 405)
+  - https://www.netflix.com/tudum/articles/full-swing-release-date-cast-news (Status: 405)
+  - https://www.skysports.com/golf/news/12176/12945749/fedexcup-scottie-scheffler-viktor-hovland-rory-mcilroy-lead-chase-at-tour-championship-in-pga-tour-finale (Status: 405)
