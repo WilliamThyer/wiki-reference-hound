@@ -1,6 +1,3 @@
 output/*
 __pycache__/*
-BOT_DETECTION_IMPROVEMENTS.md
-FIX_SUMMARY.md
-PARALLEL_PROCESSING.md
 test.ipynb
