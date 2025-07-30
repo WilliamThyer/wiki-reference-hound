@@ -17,7 +17,7 @@ from typing import Dict, List, Tuple, Optional
 from fetch_top_articles import get_top_articles
 from fetch_article_html import get_article_html
 from extract_references import extract_external_links, filter_links_for_checking
-from check_links import check_all_links_with_archives, print_link_summary
+from check_links import check_all_links_with_archives, check_all_links_with_archives_parallel, print_link_summary
 from generate_report import write_report, write_summary_report, print_report_summary, create_incremental_csv_writer, write_article_results_to_csv
 from utils import clean_article_title, normalize_url, format_duration
 
@@ -35,6 +35,12 @@ def main():
                        help='Delay between link checks in seconds (default: 0.1)')
     parser.add_argument('--output-dir', type=str, default='output',
                        help='Output directory for reports (default: output)')
+    parser.add_argument('--parallel', action='store_true',
+                       help='Enable parallel processing for faster link checking')
+    parser.add_argument('--max-workers', type=int, default=20,
+                       help='Maximum number of concurrent workers for parallel processing (default: 20)')
+    parser.add_argument('--chunk-size', type=int, default=100,
+                       help='Number of links to process in each batch for parallel processing (default: 100)')
     
     args = parser.parse_args()
     
@@ -42,6 +48,8 @@ def main():
     print("=" * 40)
     print(f"📊 Checking top {args.limit} articles from yesterday")
     print(f"⏱️  Timeout: {args.timeout}s, Delay: {args.delay}s")
+    if args.parallel:
+        print(f"🚀 Parallel processing enabled: {args.max_workers} workers, chunk size: {args.chunk_size}")
     print()
     
     start_time = time.time()
@@ -94,8 +102,18 @@ def main():
             total_links_checked += len(links_to_check)
             
             # Check if links are alive
-            print(f"   🔗 Checking link status...")
-            results = check_all_links_with_archives(links_to_check, archive_groups, timeout=args.timeout, delay=args.delay)
+            if args.parallel:
+                print(f"   🔗 Checking link status (parallel, {args.max_workers} workers)...")
+                results = check_all_links_with_archives_parallel(
+                    links_to_check, 
+                    archive_groups, 
+                    timeout=args.timeout, 
+                    max_workers=args.max_workers,
+                    chunk_size=args.chunk_size
+                )
+            else:
+                print(f"   🔗 Checking link status...")
+                results = check_all_links_with_archives(links_to_check, archive_groups, timeout=args.timeout, delay=args.delay)
             
             # Filter dead links (only truly dead, not archived or blocked)
             dead = [(url, code) for url, status, code in results if status == 'dead']

@@ -1,11 +1,14 @@
 import requests
-from typing import List, Tuple, Optional, Dict
+from typing import List, Tuple, Optional, Dict, Callable
 from tqdm import tqdm
 import time
 from extract_references import is_archive_url, group_links_with_archives
 import re
 from urllib.parse import urlparse, urljoin
 import socket
+import concurrent.futures
+from threading import Lock
+import queue
 
 
 def is_likely_bot_blocked(response: requests.Response) -> bool:
@@ -420,6 +423,345 @@ def check_all_links(links: List[str], timeout: float = 5.0, delay: float = 0.1) 
             time.sleep(delay)
     
     return results
+
+
+def create_rate_limited_session(max_requests_per_second: int = 10) -> requests.Session:
+    """
+    Create a session with built-in rate limiting and proper headers.
+    
+    Args:
+        max_requests_per_second: Maximum requests per second per session
+        
+    Returns:
+        Configured requests.Session
+    """
+    session = requests.Session()
+    
+    # Add rate limiting headers
+    session.headers.update({
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Accept-Encoding': 'gzip, deflate',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1'
+    })
+    
+    return session
+
+
+def check_link_status_with_session(
+    url: str, 
+    session: requests.Session, 
+    timeout: float = 5.0
+) -> Tuple[str, str, Optional[int]]:
+    """
+    Check link status using a shared session for better performance.
+    This is a simplified version that uses the session for all requests.
+    
+    Args:
+        url: URL to check
+        session: Shared requests.Session
+        timeout: Request timeout in seconds
+        
+    Returns:
+        Tuple of (url, status, status_code)
+    """
+    # Skip archive links entirely
+    if is_archive_url(url):
+        return url, 'archived', None
+    
+    # Step 1: Check DNS resolution first (fastest check)
+    if not check_dns_resolution(url):
+        return url, 'connection_error', None
+    
+    # Step 2: Try standard HEAD request with session
+    try:
+        response = session.head(url, timeout=timeout, allow_redirects=True)
+        
+        # Success case
+        if response.status_code < 400:
+            return url, 'alive', response.status_code
+        
+        # Handle 403 (Forbidden) - check if it's bot blocking
+        elif response.status_code == 403:
+            # Try GET request to get better bot detection
+            try:
+                get_response = session.get(url, timeout=timeout, allow_redirects=True, stream=True)
+                get_response.close()
+                if is_likely_bot_blocked(get_response):
+                    return url, 'blocked', response.status_code
+                else:
+                    # If not bot blocking, try alternative methods
+                    alt_result = check_with_alternative_methods(url, timeout)
+                    if alt_result[1] == 'alive':
+                        return alt_result
+                    else:
+                        return url, 'dead', response.status_code
+            except:
+                # If GET fails, use HEAD response for bot detection
+                if is_likely_bot_blocked(response):
+                    return url, 'blocked', response.status_code
+                else:
+                    return url, 'dead', response.status_code
+        
+        # Handle redirect status codes - these should be followed to final destination
+        elif response.status_code in [301, 302, 303, 307, 308]:
+            # Use session to properly follow redirects
+            try:
+                get_response = session.get(url, timeout=timeout, stream=True)
+                get_response.close()
+                
+                if get_response.status_code < 400:
+                    return url, 'alive', get_response.status_code
+                else:
+                    return url, 'dead', get_response.status_code
+            except:
+                return url, 'dead', response.status_code
+        
+        # Other error status codes - try GET request as fallback for 404s
+        else:
+            # For 404 status codes, try GET request as some servers don't support HEAD
+            if response.status_code == 404:
+                try:
+                    get_response = session.get(url, timeout=timeout, allow_redirects=True, stream=True)
+                    get_response.close()
+                    if get_response.status_code < 400:
+                        return url, 'alive', get_response.status_code
+                    else:
+                        return url, 'dead', get_response.status_code
+                except:
+                    return url, 'dead', response.status_code
+            else:
+                return url, 'dead', response.status_code
+        
+    except requests.RequestException as e:
+        # Step 3: If HEAD fails, try GET request
+        try:
+            response = session.get(url, timeout=timeout, allow_redirects=True, stream=True)
+            response.close()
+            if response.status_code < 400:
+                return url, 'alive', response.status_code
+            elif response.status_code == 403:
+                if is_likely_bot_blocked(response):
+                    return url, 'blocked', response.status_code
+                else:
+                    return url, 'dead', response.status_code
+            else:
+                return url, 'dead', response.status_code
+            
+        except requests.RequestException as e2:
+            # Step 4: Try alternative methods as last resort
+            alt_result = check_with_alternative_methods(url, timeout)
+            if alt_result[1] == 'alive':
+                return alt_result
+            
+            # Step 5: Try redirect chain validation
+            redirect_result = validate_redirect_chain(url, timeout)
+            if redirect_result[1] == 'alive':
+                return redirect_result
+            
+            # All methods failed
+            return url, 'connection_error', None
+
+
+def check_links_parallel(
+    links: List[str], 
+    archive_groups: Dict[str, List[str]],
+    max_workers: int = 20,
+    timeout: float = 5.0,
+    chunk_size: int = 100,
+    progress_callback: Optional[Callable] = None
+) -> List[Tuple[str, str, Optional[int]]]:
+    """
+    Check links in parallel using ThreadPoolExecutor.
+    
+    Args:
+        links: List of URLs to check
+        archive_groups: Dictionary mapping original URLs to archive URLs
+        max_workers: Maximum number of concurrent workers
+        timeout: Request timeout in seconds
+        chunk_size: Number of links to process in each batch
+        progress_callback: Optional callback for progress updates
+        
+    Returns:
+        List of tuples (url, status, status_code)
+    """
+    if not links:
+        return []
+    
+    results = []
+    results_lock = Lock()
+    
+    # Filter out archived links first
+    links_to_check = []
+    for link in links:
+        if link in archive_groups and archive_groups[link]:
+            results.append((link, 'archived', None))
+        else:
+            links_to_check.append(link)
+    
+    if not links_to_check:
+        return results
+    
+    # Process in chunks to avoid overwhelming memory
+    def process_chunk(chunk_links: List[str]) -> List[Tuple[str, str, Optional[int]]]:
+        chunk_results = []
+        
+        # Create a session for this chunk
+        session = create_rate_limited_session()
+        
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Submit all links in chunk
+            future_to_url = {
+                executor.submit(check_link_status_with_session, url, session, timeout): url 
+                for url in chunk_links
+            }
+            
+            # Collect results as they complete
+            for future in concurrent.futures.as_completed(future_to_url):
+                url = future_to_url[future]
+                try:
+                    result = future.result()
+                    chunk_results.append(result)
+                    
+                    # Update progress if callback provided
+                    if progress_callback:
+                        progress_callback(1)
+                        
+                except Exception as e:
+                    # Handle any exceptions in individual link checking
+                    chunk_results.append((url, 'connection_error', None))
+                    if progress_callback:
+                        progress_callback(1)
+        
+        return chunk_results
+    
+    # Process links in chunks
+    total_chunks = (len(links_to_check) + chunk_size - 1) // chunk_size
+    
+    with tqdm(total=len(links_to_check), desc=f"Checking links ({max_workers} workers)", unit="link") as pbar:
+        for i in range(0, len(links_to_check), chunk_size):
+            chunk = links_to_check[i:i + chunk_size]
+            chunk_results = process_chunk(chunk)
+            
+            with results_lock:
+                results.extend(chunk_results)
+            
+            pbar.update(len(chunk))
+    
+    return results
+
+
+def check_all_links_with_archives_parallel(
+    links: List[str], 
+    archive_groups: Dict[str, List[str]], 
+    timeout: float = 5.0, 
+    max_workers: int = 20,
+    chunk_size: int = 100,
+    use_secondary_validation: bool = True
+) -> List[Tuple[str, str, Optional[int]]]:
+    """
+    Check the status of all links with archive awareness and parallel processing.
+    
+    Args:
+        links: List of URLs to check (should be original URLs only)
+        archive_groups: Dictionary mapping original URLs to archive URLs
+        timeout: Request timeout in seconds
+        max_workers: Maximum number of concurrent workers
+        chunk_size: Number of links to process in each batch
+        use_secondary_validation: Whether to use secondary validation for potential false positives
+        
+    Returns:
+        List of tuples (url, status, status_code)
+    """
+    if not links:
+        return []
+    
+    # Use parallel processing for the main link checking
+    results = check_links_parallel(
+        links, 
+        archive_groups, 
+        max_workers=max_workers,
+        timeout=timeout,
+        chunk_size=chunk_size
+    )
+    
+    # Apply secondary validation if requested (this could also be parallelized)
+    if use_secondary_validation:
+        validated_results = []
+        for result in results:
+            url, status, status_code = result
+            
+            # Only apply secondary validation to dead links
+            if status == 'dead':
+                validated_result = validate_link_with_secondary_check(url, result, timeout)
+                validated_results.append(validated_result)
+            else:
+                validated_results.append(result)
+        
+        return validated_results
+    
+    return results
+
+
+def create_parallel_progress_tracker(total_links: int, max_workers: int):
+    """
+    Create a progress tracker that shows concurrent activity.
+    
+    Args:
+        total_links: Total number of links to process
+        max_workers: Number of concurrent workers
+        
+    Returns:
+        Tuple of (progress_bar, update_function)
+    """
+    pbar = tqdm(
+        total=total_links, 
+        desc=f"Checking links ({max_workers} workers)", 
+        unit="link",
+        bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]'
+    )
+    
+    def update_progress(completed: int = 1):
+        pbar.update(completed)
+    
+    return pbar, update_progress
+
+
+def check_links_with_memory_management(
+    links: List[str],
+    archive_groups: Dict[str, List[str]],
+    max_workers: int = 20,
+    max_memory_mb: int = 512
+) -> List[Tuple[str, str, Optional[int]]]:
+    """
+    Check links with memory-aware chunking.
+    
+    Args:
+        links: List of URLs to check
+        archive_groups: Dictionary mapping original URLs to archive URLs
+        max_workers: Maximum number of concurrent workers
+        max_memory_mb: Maximum memory usage in MB
+        
+    Returns:
+        List of tuples (url, status, status_code)
+    """
+    # Estimate memory per link check
+    estimated_memory_per_link = 0.1  # MB per link check
+    
+    # Calculate optimal chunk size based on memory
+    optimal_chunk_size = min(
+        max_memory_mb // (estimated_memory_per_link * max_workers),
+        100  # Cap at 100 links per chunk
+    )
+    
+    return check_links_parallel(
+        links, 
+        archive_groups, 
+        max_workers=max_workers,
+        chunk_size=optimal_chunk_size
+    )
 
 
 def categorize_links(links_results: List[Tuple[str, str, Optional[int]]]) -> dict:
