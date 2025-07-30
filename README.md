@@ -67,6 +67,13 @@ Options:
   --timeout SECONDS      Request timeout in seconds (default: 5.0)
   --delay SECONDS        Delay between link checks (default: 0.1)
   --output-dir DIR       Output directory (default: output)
+  --parallel             Enable parallel processing for faster checking
+  --max-workers N        Number of concurrent workers (default: 20)
+  --chunk-size N         Links per batch for parallel processing (default: 100)
+  --browser-validation   Enable browser validation for false positive detection
+  --browser-timeout N    Browser page load timeout in seconds (default: 30)
+  --no-headless          Run browser in visible mode (default: headless)
+  --max-browser-links N  Max dead links to validate with browser (default: 50)
 ```
 
 ### Examples
@@ -83,6 +90,12 @@ python main.py --delay 0.5
 
 # Save reports to custom directory
 python main.py --output-dir my_reports
+
+# Enable parallel processing for faster checking
+python main.py --parallel --max-workers 30
+
+# Enable browser validation for false positive detection
+python main.py --browser-validation --browser-timeout 20
 ```
 
 ## 📊 Output Format
@@ -141,11 +154,79 @@ For each external link:
 ### 5. Generate Reports
 Creates timestamped reports with all dead links found.
 
+## 🔍 Browser Validation (False Positive Detection)
+
+The tool includes optional browser validation to detect false positives in dead link detection. This is useful for:
+
+- **JavaScript-heavy sites**: Some sites require JavaScript to load content
+- **Complex redirects**: Multi-step redirects that HTTP libraries miss
+- **Bot detection**: Sites that block automated requests but work in browsers
+- **Content verification**: Ensuring pages actually load meaningful content
+
+### Setup Browser Validation
+
+1. **Install dependencies**:
+```bash
+python setup_browser_validation.py
+```
+
+2. **Install Chrome/Chromium** (if not already installed):
+   - macOS: Download from https://www.google.com/chrome/
+   - Linux: `sudo apt-get install google-chrome-stable`
+   - Windows: Download from https://www.google.com/chrome/
+
+3. **Test browser validation**:
+```bash
+python test_browser_validation.py --test-urls
+```
+
+### Using Browser Validation
+
+```bash
+# Enable browser validation
+python main.py --browser-validation
+
+# Customize browser settings
+python main.py --browser-validation --browser-timeout 20 --no-headless
+
+# Limit browser validation to first 20 dead links (for safety)
+python main.py --browser-validation --max-browser-links 20
+```
+
+### Browser Validation Features
+
+- **Headless mode**: Runs browser in background (default)
+- **Visible mode**: Run with `--no-headless` for debugging
+- **Configurable timeout**: Set with `--browser-timeout`
+- **Safety limits**: Limit validation with `--max-browser-links`
+- **False positive detection**: Identifies links that work in browsers but fail HTTP checks
+
+### Browser Validation Output
+
+When browser validation is enabled, you'll see additional output:
+```
+🔍 Browser Validation Summary
+========================================
+Total links checked: 15
+✅ Confirmed alive (false positives): 3
+❌ Confirmed dead: 10
+🚫 Blocked (bot protection): 2
+⏱️  Timeout: 0
+🔌 Error: 0
+
+🎉 False Positives Found:
+   - https://example.com/page
+     → Redirected to: https://example.com/new-page
+     → Title: Example Page
+```
+
 ## 📦 Dependencies
 
 - **requests**: HTTP requests for APIs and link checking
 - **beautifulsoup4**: HTML parsing for link extraction
 - **tqdm**: Progress bars for better UX
+- **selenium**: Browser automation for false positive detection (optional)
+- **webdriver-manager**: Automatic ChromeDriver management (optional)
 
 ## 🤝 Contributing
 

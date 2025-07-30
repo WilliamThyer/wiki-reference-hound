@@ -41,6 +41,15 @@ def main():
                        help='Maximum number of concurrent workers for parallel processing (default: 20)')
     parser.add_argument('--chunk-size', type=int, default=100,
                        help='Number of links to process in each batch for parallel processing (default: 100)')
+    # Browser validation arguments
+    parser.add_argument('--browser-validation', action='store_true',
+                       help='Enable browser validation for false positive detection')
+    parser.add_argument('--browser-timeout', type=int, default=30,
+                       help='Browser page load timeout in seconds (default: 30)')
+    parser.add_argument('--no-headless', action='store_true',
+                       help='Run browser in visible mode (default: headless)')
+    parser.add_argument('--max-browser-links', type=int, default=50,
+                       help='Maximum number of dead links to validate with browser (default: 50)')
     
     args = parser.parse_args()
     
@@ -50,6 +59,9 @@ def main():
     print(f"⏱️  Timeout: {args.timeout}s, Delay: {args.delay}s")
     if args.parallel:
         print(f"🚀 Parallel processing enabled: {args.max_workers} workers, chunk size: {args.chunk_size}")
+    if args.browser_validation:
+        print(f"🔍 Browser validation enabled: {args.browser_timeout}s timeout, headless: {not args.no_headless}")
+        print(f"   Max browser validation links: {args.max_browser_links}")
     print()
     
     start_time = time.time()
@@ -102,18 +114,41 @@ def main():
             total_links_checked += len(links_to_check)
             
             # Check if links are alive
-            if args.parallel:
-                print(f"   🔗 Checking link status (parallel, {args.max_workers} workers)...")
-                results = check_all_links_with_archives_parallel(
+            if args.browser_validation:
+                # Use enhanced link checking with browser validation
+                from enhanced_check_links import check_links_with_browser_validation
+                
+                print(f"   🔗 Checking link status with browser validation...")
+                results, browser_report = check_links_with_browser_validation(
                     links_to_check, 
                     archive_groups, 
                     timeout=args.timeout, 
                     max_workers=args.max_workers,
-                    chunk_size=args.chunk_size
+                    chunk_size=args.chunk_size,
+                    browser_timeout=args.browser_timeout,
+                    browser_headless=not args.no_headless,
+                    enable_browser_validation=True
                 )
+                
+                # Store browser report for later summary
+                if hasattr(args, 'browser_reports'):
+                    args.browser_reports.append(browser_report)
+                else:
+                    args.browser_reports = [browser_report]
             else:
-                print(f"   🔗 Checking link status...")
-                results = check_all_links_with_archives(links_to_check, archive_groups, timeout=args.timeout, delay=args.delay)
+                # Use standard link checking
+                if args.parallel:
+                    print(f"   🔗 Checking link status (parallel, {args.max_workers} workers)...")
+                    results = check_all_links_with_archives_parallel(
+                        links_to_check, 
+                        archive_groups, 
+                        timeout=args.timeout, 
+                        max_workers=args.max_workers,
+                        chunk_size=args.chunk_size
+                    )
+                else:
+                    print(f"   🔗 Checking link status...")
+                    results = check_all_links_with_archives(links_to_check, archive_groups, timeout=args.timeout, delay=args.delay)
             
             # Filter dead links (only truly dead, not archived or blocked)
             dead = [(url, code) for url, status, code in results if status == 'dead']
@@ -162,6 +197,28 @@ def main():
     
     if dead_links:
         print_report_summary(dead_links)
+    
+    # Print browser validation summary if used
+    if args.browser_validation and hasattr(args, 'browser_reports') and args.browser_reports:
+        print("\n🔍 Browser Validation Summary")
+        print("=" * 40)
+        
+        total_false_positives = 0
+        total_confirmed_dead = 0
+        total_blocked = 0
+        
+        for i, report in enumerate(args.browser_reports):
+            if report:  # Only process non-None reports
+                total_false_positives += report.get('false_positives', 0)
+                total_confirmed_dead += report.get('confirmed_dead', 0)
+                total_blocked += report.get('blocked', 0)
+        
+        print(f"Total false positives detected: {total_false_positives}")
+        print(f"Total confirmed dead: {total_confirmed_dead}")
+        print(f"Total blocked by bot protection: {total_blocked}")
+        
+        if total_false_positives > 0:
+            print(f"🎉 Browser validation helped detect {total_false_positives} false positives!")
     
     print("\n✅ Done!")
 
