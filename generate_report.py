@@ -43,6 +43,58 @@ def write_report(dead_links: Dict[str, List[Tuple[str, Optional[int]]]], output_
     return filepath
 
 
+def create_incremental_csv_writer(output_dir: str = "output") -> Tuple[str, csv.writer]:
+    """
+    Create a CSV file and writer for incremental writing of dead links.
+    
+    Args:
+        output_dir: Directory to save the report (default: "output")
+        
+    Returns:
+        Tuple of (filepath, csv_writer)
+    """
+    # Create output directory if it doesn't exist
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Generate filename with timestamp
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"dead_links_report_{timestamp}.csv"
+    filepath = os.path.join(output_dir, filename)
+    
+    # Create file and writer
+    csvfile = open(filepath, 'w', newline='', encoding='utf-8')
+    writer = csv.writer(csvfile)
+    
+    # Write header
+    writer.writerow(['article_title', 'url', 'status_code', 'timestamp'])
+    
+    return filepath, writer, csvfile
+
+
+def write_article_results_to_csv(writer: csv.writer, article_title: str, 
+                                dead_links: List[Tuple[str, Optional[int]]], 
+                                timestamp: str = None) -> None:
+    """
+    Write results for a single article to the CSV file.
+    
+    Args:
+        writer: CSV writer object
+        article_title: Title of the article
+        dead_links: List of (url, status_code) tuples for dead links
+        timestamp: Timestamp to use (defaults to current time)
+    """
+    if timestamp is None:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    
+    for url, status_code in dead_links:
+        writer.writerow([
+            article_title,
+            url,
+            status_code if status_code is not None else 'CONNECTION_ERROR',
+            timestamp
+        ])
+
+
 def write_summary_report(dead_links: Dict[str, List[Tuple[str, Optional[int]]]], output_dir: str = "output") -> str:
     """
     Generate a summary report with statistics.

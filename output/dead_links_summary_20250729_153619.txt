@@ -1,0 +1,54 @@
+Wikipedia Dead Links Report Summary
+========================================
+
+Generated: 2025-07-29 15:36:19
+Total articles with dead links: 2
+Total dead links found: 33
+Note: 9 links returned 403 (likely blocking bots)
+
+Status Code Breakdown:
+--------------------
+404: 22
+403 (Bot Blocked): 9
+400: 1
+405: 1
+
+Articles with Dead Links:
+-------------------------
+
+The Fantastic Four: First Steps (1 dead links):
+  - https://www.houstonchronicle.com/news/houston-texas/trending/article/topgolf-marvel-fantastic-four-20414784.php (Status: 403)
+
+Ozzy Osbourne (32 dead links):
+  - http://www.people.com/people/article/0,,624981,00.html (Status: 404)
+  - http://www.independentmusicawards.com/ima/judges/11th-annual-ima-judges/ (Status: 405)
+  - https://www.riaa.com/goldandplatinumdata.php (Status: 404)
+  - http://www.desmoinesregister.com/apps/pbcs.dll/article?AID=/99999999/ENT/502270318 (Status: 404)
+  - https://www.riaa.com/goldandplatinumdata.php?resultpage=1&table=SEARCH_RESULTS&action=&title=no%20more%20tears&artist=&format=&debutLP=&category=&sex=&releaseDate=&requestNo=&type=&level=&label=&company=&certificationDate=&awardDescription=&catalogNo=&aSex=&rec_id=&charField=&gold=&platinum=&multiPlat=&level2=&certDate=&album=&id=&after=&before=&startMonth=1&endMonth=1&startYear=1958&endYear=2009&sort=Artist&perPage=25 (Status: 404)
+  - http://www.wwe.com/shows/raw/special/allspecialguesthosts/ (Status: 404)
+  - https://www.rollingstone.com/artists/blacksabbath/albums/album/227113/review/5946174/sabbath_bloody_sabbath (Status: 404)
+  - https://www.telegraph.co.uk/news/2025/03/08/ozzy-osbourne-among-stars-demanding-inquiry-anti-israel-bbc/ (Status: 403)
+  - https://www.rollingstone.com/music/news/17386/117259 (Status: 404)
+  - http://exclaim.ca/articles/generalarticlesynopsfullart.aspx?csid1=145&csid2=844&fid1=48266 (Status: 404)
+  - https://www.riaa.com/goldandplatinumdata.php?resultpage=1&table=SEARCH_RESULTS&action=&title=SABBATH,%20BLOODY%20SABBATH&artist=Black%20Sabbath&format=&debutLP=&category=&sex=&releaseDate=&requestNo=&type=&level=&label=&company=&certificationDate=&awardDescription=&catalogNo=&aSex=&rec_id=&charField=&gold=&platinum=&multiPlat=&level2=&certDate=&album=&id=&after=&before=&startMonth=1&endMonth=1&startYear=1958&endYear=2009&sort=Artist&perPage=25 (Status: 404)
+  - https://www.thewrap.com/ind-column/osbournes-over-and-out-fox_4939 (Status: 404)
+  - https://men.msn.com/articlees.aspx?cp-documentid=760888 (Status: 404)
+  - https://www.telegraph.co.uk/tv/2016/08/26/sharon-osbourne-her-life-and-career-in-pictures/sharon-osbourne-in-2005/ (Status: 403)
+  - https://www.rollingstone.com/artists/blacksabbath/albums/album/170807/review/5946986/sabotage (Status: 404)
+  - https://www.telegraph.co.uk/news/uknews/1449467/Ozzy-has-No-1-hit-from-his-hospital-bed.html (Status: 403)
+  - https://www.riaa.com/goldandplatinumdata.php?resultpage=1&table=SEARCH_RESULTS&action=&title=ultimate%20sin&artist=ozzy%20osbourne&format=&debutLP=&category=&sex=&releaseDate=&requestNo=&type=&level=&label=&company=&certificationDate=&awardDescription=&catalogNo=&aSex=&rec_id=&charField=&gold=&platinum=&multiPlat=&level2=&certDate=&album=&id=&after=&before=&startMonth=1&endMonth=1&startYear=1958&endYear=2009&sort=Artist&perPage=25 (Status: 404)
+  - http://music.yahoo.com/read/story/12037722 (Status: 404)
+  - http://www.msopr.com/press-releases/ozzy-osbourne-goes-%27under-cover%27/ (Status: 404)
+  - https://www.riaa.com/goldandplatinumdata.php?resultpage=1&table=SEARCH_RESULTS&action=&title=master%20of%20reality&artist=black%20sabbath&format=&debutLP=&category=&sex=&releaseDate=&requestNo=&type=&level=&label=&company=&certificationDate=&awardDescription=&catalogNo=&aSex=&rec_id=&charField=&gold=&platinum=&multiPlat=&level2=&certDate=&album=&id=&after=&before=&startMonth=1&endMonth=1&startYear=1958&endYear=2009&sort=Artist&perPage=25 (Status: 404)
+  - https://www.rollingstone.com/music/reviews/album/2747/21209 (Status: 404)
+  - https://www.nbcnews.com/id/6308021 (Status: 404)
+  - https://www.facebook.com/ozzyosbourne/posts/10151607133627318 (Status: 400)
+  - https://www.telegraph.co.uk/culture/books/booknews/6208232/Ozzy-Osbourne-Black-Sabbath-frontman-and-legendary-hellraiser-to-release-autobiography.html (Status: 403)
+  - https://www.telegraph.co.uk/news/worldnews/northamerica/usa/1449437/Ozzy-prescribed-13000-doses-of-drugs-in-a-year-by-doctor.html (Status: 403)
+  - https://www.telegraph.co.uk/culture/6274535/Ozzy-Osbourne-I-was-bad-for-a-long-time-.html (Status: 403)
+  - https://www.telegraph.co.uk/news/2025/07/23/ozzy-osbourne-israel-rock-music/ (Status: 403)
+  - https://www.telegraph.co.uk/news/2025/07/23/air-ambulance-called-to-ozzy-osbournes-home-before-he-died/ (Status: 403)
+  - https://www.usask.ca/relst/jrpc/art5-devilmusic.html (Status: 404)
+  - https://www.nme.com/news/nme-awards/16138 (Status: 404)
+  - https://www.nme.com/news/ozzy-osbourne/48951 (Status: 404)
+  - https://news.yahoo.com/black-sabbath-announce-album-world-tour-171928812.html (Status: 404)

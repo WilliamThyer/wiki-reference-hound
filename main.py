@@ -18,7 +18,7 @@ from fetch_top_articles import get_top_articles
 from fetch_article_html import get_article_html
 from extract_references import extract_external_links, filter_links_for_checking
 from check_links import check_all_links_with_archives, print_link_summary
-from generate_report import write_report, write_summary_report, print_report_summary
+from generate_report import write_report, write_summary_report, print_report_summary, create_incremental_csv_writer, write_article_results_to_csv
 from utils import clean_article_title, normalize_url, format_duration
 
 
@@ -62,56 +62,70 @@ def main():
     total_links_checked = 0
     total_dead_links = 0
     
-    for i, title in enumerate(articles, 1):
-        clean_title = clean_article_title(title)
-        print(f"🔍 Processing ({i}/{len(articles)}): {clean_title}")
-        
-        # Fetch article HTML
-        html = get_article_html(title)
-        if not html:
-            print(f"   ⚠️  Could not fetch content for '{clean_title}'")
-            continue
-        
-        # Extract external links
-        all_links = extract_external_links(html)
-        if not all_links:
-            print(f"   ℹ️  No external links found in '{clean_title}'")
-            continue
-        
-        # Filter links for checking (remove archives, group with originals)
-        links_to_check, archive_groups = filter_links_for_checking(all_links)
-        
-        print(f"   📎 Found {len(all_links)} total links ({len(links_to_check)} to check, {len(archive_groups)} with archives)")
-        total_links_checked += len(links_to_check)
-        
-        # Check if links are alive
-        print(f"   🔗 Checking link status...")
-        results = check_all_links_with_archives(links_to_check, archive_groups, timeout=args.timeout, delay=args.delay)
-        
-        # Filter dead links (only truly dead, not archived or blocked)
-        dead = [(url, code) for url, status, code in results if status == 'dead']
-        blocked = [(url, code) for url, status, code in results if status == 'blocked']
-        
-        if dead:
-            dead_links[clean_title] = dead
-            total_dead_links += len(dead)
-            print(f"   ❌ Found {len(dead)} dead links")
-        else:
-            print(f"   ✅ All links are alive, archived, or blocked")
-        
-        if blocked:
-            print(f"   🚫 Found {len(blocked)} blocked links (likely bot protection)")
-        
-        print()
+    # Create CSV file for incremental writing
+    csv_filepath, csv_writer, csv_file = create_incremental_csv_writer(args.output_dir)
+    print(f"📄 CSV file created: {csv_filepath}")
+    print()
+    
+    try:
+        for i, title in enumerate(articles, 1):
+            clean_title = clean_article_title(title)
+            print(f"🔍 Processing ({i}/{len(articles)}): {clean_title}")
+            
+            # Fetch article HTML
+            html = get_article_html(title)
+            if not html:
+                print(f"   ⚠️  Could not fetch content for '{clean_title}'")
+                continue
+            
+            # Extract external links
+            all_links = extract_external_links(html)
+            if not all_links:
+                print(f"   ℹ️  No external links found in '{clean_title}'")
+                continue
+            
+            # Filter links for checking (remove archives, group with originals)
+            links_to_check, archive_groups = filter_links_for_checking(all_links)
+            
+            # Count links that actually have archives
+            links_with_archives = sum(1 for archives in archive_groups.values() if archives)
+            
+            print(f"   📎 Found {len(all_links)} total links ({len(links_to_check)} to check, {links_with_archives} with archives)")
+            total_links_checked += len(links_to_check)
+            
+            # Check if links are alive
+            print(f"   🔗 Checking link status...")
+            results = check_all_links_with_archives(links_to_check, archive_groups, timeout=args.timeout, delay=args.delay)
+            
+            # Filter dead links (only truly dead, not archived or blocked)
+            dead = [(url, code) for url, status, code in results if status == 'dead']
+            blocked = [(url, status, code) for url, status, code in results if status == 'blocked']
+            
+            if dead:
+                dead_links[clean_title] = dead
+                total_dead_links += len(dead)
+                print(f"   ❌ Found {len(dead)} dead links")
+                
+                # Write dead links to CSV immediately
+                write_article_results_to_csv(csv_writer, clean_title, dead)
+                csv_file.flush()  # Ensure data is written to disk
+            else:
+                print(f"   ✅ All links are alive, archived, or blocked")
+            
+            if blocked:
+                print(f"   🚫 Found {len(blocked)} blocked links (likely bot protection)")
+            
+            print()
+    finally:
+        # Ensure CSV file is closed
+        csv_file.close()
     
     # Step 3: Generate reports
     print("📋 Generating reports...")
     
     if dead_links:
-        csv_file = write_report(dead_links, args.output_dir)
         summary_file = write_summary_report(dead_links, args.output_dir)
-        
-        print(f"📄 CSV report saved to: {csv_file}")
+        print(f"📄 CSV report saved to: {csv_filepath}")
         print(f"📄 Summary report saved to: {summary_file}")
     else:
         print("✅ No dead links found!")
