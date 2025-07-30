@@ -1,6 +1,12 @@
 import requests
+import urllib3
+import warnings
 from datetime import datetime, timedelta
 from typing import List
+
+# Suppress SSL/TLS warnings
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+warnings.filterwarnings('ignore', message='Unverified HTTPS request')
 
 
 def get_top_articles(limit: int = 25) -> List[str]:

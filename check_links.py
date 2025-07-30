@@ -1,4 +1,6 @@
 import requests
+import urllib3
+import warnings
 from typing import List, Tuple, Optional, Dict, Callable
 from tqdm import tqdm
 import time
@@ -9,6 +11,10 @@ import socket
 import concurrent.futures
 from threading import Lock
 import queue
+
+# Suppress SSL/TLS warnings
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+warnings.filterwarnings('ignore', message='Unverified HTTPS request')
 
 
 def is_likely_bot_blocked(response: requests.Response) -> bool:

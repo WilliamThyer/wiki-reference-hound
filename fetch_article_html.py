@@ -1,5 +1,11 @@
 import requests
+import urllib3
+import warnings
 from typing import Optional
+
+# Suppress SSL/TLS warnings
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+warnings.filterwarnings('ignore', message='Unverified HTTPS request')
 
 
 def get_article_html(title: str) -> str:
