@@ -1,9 +1,0 @@
-Wikipedia Dead Links Report Summary
-========================================
-
-Generated: 2025-07-22 14:11:31
-Total articles with dead links: 3
-Total dead links found: 281
-
-Status Code Breakdown:
---------------------
