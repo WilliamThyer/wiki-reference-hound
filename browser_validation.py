@@ -88,6 +88,12 @@ class BrowserValidator:
         options.add_argument('--disable-features=TranslateUI')
         options.add_argument('--disable-ipc-flooding-protection')
         
+        # Additional stability options
+        options.add_argument('--disable-web-security')
+        options.add_argument('--disable-features=VizDisplayCompositor')
+        options.add_argument('--disable-blink-features=AutomationControlled')
+        options.add_argument('--disable-features=NetworkService')
+        
         # Set user agent
         options.add_argument(f'--user-agent={self.user_agent}')
         
@@ -95,14 +101,25 @@ class BrowserValidator:
         options.add_argument('--memory-pressure-off')
         options.add_argument('--max_old_space_size=4096')
         
+        # Add experimental options for better stability
+        options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        options.add_experimental_option('useAutomationExtension', False)
+        
         try:
             driver = webdriver.Chrome(options=options)
             driver.set_page_load_timeout(self.timeout)
             driver.implicitly_wait(5)
+            
+            # Execute script to remove webdriver property
+            driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+            
             return driver
         except SessionNotCreatedException as e:
             logger.error(f"Failed to create Chrome driver: {e}")
             logger.info("Make sure Chrome/Chromium is installed and chromedriver is in PATH")
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error creating Chrome driver: {e}")
             raise
     
     def validate_url_with_browser(self, url: str) -> Tuple[str, str, Optional[int], Dict]:
@@ -133,7 +150,7 @@ class BrowserValidator:
             
             # Wait for page to load with shorter timeout
             try:
-                WebDriverWait(self.driver, 5).until(
+                WebDriverWait(self.driver, 10).until(
                     lambda driver: driver.execute_script("return document.readyState") == "complete"
                 )
             except TimeoutException:
@@ -158,17 +175,21 @@ class BrowserValidator:
             
             # Check for common error indicators in page content
             page_source = self.driver.page_source.lower()
-            error_indicators = [
-                '404', 'not found', 'page not found', 'error 404',
-                '500', 'internal server error', 'server error',
-                '403', 'forbidden', 'access denied',
-                '410', 'gone', 'resource no longer available',
+            
+            # Only look for very specific error indicators that clearly indicate dead pages
+            clear_error_indicators = [
+                '404 not found', 'page not found', 'error 404',
+                '500 internal server error', 'internal server error',
+                '403 forbidden', 'access denied',
+                '410 gone', 'resource no longer available',
                 'this page cannot be displayed',
                 'the requested url was not found',
-                'the page you are looking for could not be found'
+                'the page you are looking for could not be found',
+                'server not found', 'dns_probe_finished_nxdomain'
             ]
             
-            for indicator in error_indicators:
+            # Check for very specific error indicators
+            for indicator in clear_error_indicators:
                 if indicator in page_source:
                     additional_info['error_indicator'] = indicator
                     return url, 'dead', None, additional_info
@@ -178,7 +199,8 @@ class BrowserValidator:
                 'captcha', 'challenge', 'security check',
                 'bot detected', 'automated access',
                 'cloudflare', 'ddos protection',
-                'please verify you are human'
+                'please verify you are human',
+                'checking your browser'
             ]
             
             for indicator in blocking_indicators:
@@ -189,13 +211,20 @@ class BrowserValidator:
             # Check if page has meaningful content
             try:
                 body_text = self.driver.find_element(By.TAG_NAME, "body").text
-                if len(body_text.strip()) < 50:  # Very short content might indicate an error page
-                    additional_info['short_content'] = True
-                    return url, 'dead', None, additional_info
+                additional_info['content_length'] = len(body_text.strip())
             except:
-                pass
+                additional_info['content_length'] = 0
             
-            # If we get here, the page loaded successfully
+            # If we have a meaningful title and the page loaded, consider it alive
+            # This is the most conservative approach - if the page loads and has a title, it's probably alive
+            if additional_info.get('title') and len(additional_info['title'].strip()) > 0:
+                # Only mark as dead if the title contains very clear error indicators
+                title_lower = additional_info['title'].lower()
+                title_error_indicators = ['404 not found', 'error 404', 'page not found', 'forbidden', 'server error']
+                if not any(indicator in title_lower for indicator in title_error_indicators):
+                    return url, 'alive', 200, additional_info
+            
+            # If we get here, the page loaded but we're unsure - be conservative and assume it's alive
             return url, 'alive', 200, additional_info
             
         except TimeoutException:
@@ -207,9 +236,11 @@ class BrowserValidator:
             logger.error(f"WebDriver error for {url}: {error_msg}")
             
             # Check for specific error types
-            if 'ERR_CONNECTION_CLOSED' in error_msg or 'ERR_NAME_NOT_RESOLVED' in error_msg:
-                return url, 'dead', None, {'error': error_msg}
-            elif 'ERR_CONNECTION_REFUSED' in error_msg:
+            if any(err in error_msg.lower() for err in [
+                'err_connection_closed', 'err_name_not_resolved', 'err_connection_refused',
+                'err_connection_timed_out', 'err_connection_reset', 'err_network_changed',
+                'err_internet_disconnected', 'err_network_access_denied'
+            ]):
                 return url, 'dead', None, {'error': error_msg}
             else:
                 return url, 'error', None, {'error': error_msg}

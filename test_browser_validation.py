@@ -180,6 +180,32 @@ def test_specific_urls():
         timeout=15
     )
     
+    # Print detailed results for each URL
+    print("\n📋 Detailed Results:")
+    print("=" * 60)
+    
+    for i, (url, initial_status, initial_code) in enumerate(test_urls):
+        if i < len(browser_results):
+            browser_url, browser_status, browser_code, browser_info = browser_results[i]
+            
+            print(f"\nURL: {url}")
+            print(f"Initial: {initial_status} (Code: {initial_code})")
+            print(f"Browser: {browser_status} (Code: {browser_code})")
+            
+            if browser_info:
+                print("Browser Info:")
+                for key, value in browser_info.items():
+                    print(f"  {key}: {value}")
+            
+            # Determine if this is a false positive
+            is_false_positive = browser_status == 'alive' and initial_status == 'dead'
+            if is_false_positive:
+                print("✅ FALSE POSITIVE DETECTED")
+            elif browser_status == 'dead' and initial_status == 'dead':
+                print("❌ CONFIRMED DEAD")
+            else:
+                print(f"⚠️  UNCLEAR: {browser_status}")
+    
     report = create_browser_validation_report(test_urls, browser_results)
     print_browser_validation_summary(report)
 
