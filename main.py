@@ -118,7 +118,7 @@ def main():
             
             # Show which links have archives (for debugging/transparency)
             if links_with_archives > 0:
-                print(f"   📦 Links with archives (will be skipped):")
+                print(f"   📦 Links with archives available:")
                 for link, archives in archive_groups.items():
                     if archives:
                         print(f"      - {link} → {len(archives)} archive(s)")
@@ -225,7 +225,7 @@ def main():
     print(f"❌ Total dead links: {total_dead_links}")
     
     if total_archived_links > 0:
-        print(f"📦 Total archived links (skipped): {total_archived_links}")
+        print(f"📦 Total archive URLs found: {total_archived_links}")
     
     print(f"⏱️  Total time: {format_duration(duration)}")
     
