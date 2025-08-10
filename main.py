@@ -9,7 +9,7 @@ import argparse
 import time
 from typing import Dict, List, Tuple, Optional
 
-from fetch_top_articles import get_top_articles
+from fetch_top_articles import get_top_articles, get_all_time_top_articles
 from fetch_article_html import get_article_html
 from extract_references import extract_external_links, filter_links_for_checking
 from check_links import check_all_links_with_archives, check_all_links_with_archives_parallel, print_link_summary
@@ -23,6 +23,8 @@ def main():
     parser = argparse.ArgumentParser(description='Check for dead links in top Wikipedia articles')
     parser.add_argument('--limit', type=int, default=25, 
                        help='Number of articles to check (default: 25)')
+    parser.add_argument('--all-time', action='store_true',
+                       help='Fetch top articles of all time instead of yesterday\'s top articles')
     parser.add_argument('--timeout', type=float, default=5.0,
                        help='Request timeout in seconds (default: 5.0)')
     parser.add_argument('--delay', type=float, default=0.1,
@@ -49,7 +51,10 @@ def main():
     
     print("🔍 Wikipedia Dead Link Checker")
     print("=" * 40)
-    print(f"📊 Checking top {args.limit} articles from yesterday")
+    if args.all_time:
+        print(f"📊 Checking top {args.limit} articles of all time")
+    else:
+        print(f"📊 Checking top {args.limit} articles from yesterday")
     print(f"⏱️  Timeout: {args.timeout}s, Delay: {args.delay}s")
     if args.parallel:
         print(f"🚀 Parallel processing enabled: {args.max_workers} workers, chunk size: {args.chunk_size}")
@@ -62,7 +67,10 @@ def main():
     
     # Step 1: Fetch top articles
     print("📰 Fetching top articles...")
-    articles = get_top_articles(limit=args.limit)
+    if args.all_time:
+        articles = get_all_time_top_articles(limit=args.limit)
+    else:
+        articles = get_top_articles(limit=args.limit)
     
     if not articles:
         print("❌ Failed to fetch articles. Exiting.")
@@ -75,6 +83,7 @@ def main():
     dead_links = {}
     total_links_checked = 0
     total_dead_links = 0
+    total_archived_links = 0  # Track total archived links
     all_browser_validation_results = {}  # Store browser validation results for all articles
     
     # Create CSV file for incremental writing (keeping for backward compatibility)
@@ -106,6 +115,14 @@ def main():
             links_with_archives = sum(1 for archives in archive_groups.values() if archives)
             
             print(f"   📎 Found {len(all_links)} total links ({len(links_to_check)} to check, {links_with_archives} with archives)")
+            
+            # Show which links have archives (for debugging/transparency)
+            if links_with_archives > 0:
+                print(f"   📦 Links with archives (will be skipped):")
+                for link, archives in archive_groups.items():
+                    if archives:
+                        print(f"      - {link} → {len(archives)} archive(s)")
+            
             total_links_checked += len(links_to_check)
             
             # Check link status
@@ -155,6 +172,7 @@ def main():
             # Filter dead links (only truly dead, not archived or blocked)
             dead = [(url, code) for url, status, code in results if status == 'dead']
             blocked = [(url, status, code) for url, status, code in results if status == 'blocked']
+            archived = [(url, code) for url, status, code in results if status == 'archived']
             
             if dead:
                 dead_links[clean_title] = dead
@@ -169,6 +187,10 @@ def main():
             
             if blocked:
                 print(f"   🚫 Found {len(blocked)} blocked links (likely bot protection)")
+            
+            if archived:
+                print(f"   📦 Found {len(archived)} archived links (skipped during checking)")
+                total_archived_links += len(archived)
             
             print()
     finally:
@@ -201,6 +223,10 @@ def main():
     print(f"📰 Articles processed: {len(articles)}")
     print(f"🔗 Total links checked: {total_links_checked}")
     print(f"❌ Total dead links: {total_dead_links}")
+    
+    if total_archived_links > 0:
+        print(f"📦 Total archived links (skipped): {total_archived_links}")
+    
     print(f"⏱️  Total time: {format_duration(duration)}")
     
     if dead_links:
@@ -247,9 +273,16 @@ def test_individual_components():
     print("🧪 Testing individual components...")
     
     # Test fetching top articles
-    print("\n1. Testing fetch_top_articles...")
-    articles = get_top_articles(limit=3)
-    print(f"   Found {len(articles)} articles: {articles}")
+    print("\n1. Testing fetch_top_articles (daily)...")
+    daily_articles = get_top_articles(limit=3)
+    print(f"   Found {len(daily_articles)} daily articles: {daily_articles}")
+    
+    print("\n2. Testing fetch_top_articles (all-time)...")
+    all_time_articles = get_all_time_top_articles(limit=3)
+    print(f"   Found {len(all_time_articles)} all-time articles: {all_time_articles}")
+    
+    # Use the first available articles for further testing
+    articles = daily_articles if daily_articles else all_time_articles
     
     if articles:
         # Test fetching article HTML
