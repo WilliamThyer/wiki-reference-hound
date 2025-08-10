@@ -1,22 +1,12 @@
 #!/usr/bin/env python3
 """
 Browser-based validation for detecting false positives in dead link detection.
-
-This module uses Selenium WebDriver to perform secondary validation of links
-that appear to be dead using HTTP requests. Browser automation can help detect
-false positives by:
-
-1. Rendering JavaScript content
-2. Handling complex redirects
-3. Bypassing bot detection
-4. Checking actual page content
 """
 
 import time
 import logging
 from typing import List, Tuple, Optional, Dict
 from urllib.parse import urlparse
-import requests
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -25,15 +15,11 @@ logger = logging.getLogger(__name__)
 try:
     from selenium import webdriver
     from selenium.webdriver.chrome.options import Options
-    from selenium.webdriver.chrome.service import Service
     from selenium.webdriver.common.by import By
     from selenium.webdriver.support.ui import WebDriverWait
     from selenium.webdriver.support import expected_conditions as EC
     from selenium.common.exceptions import (
-        TimeoutException, 
-        WebDriverException, 
-        NoSuchElementException,
-        SessionNotCreatedException
+        TimeoutException, WebDriverException, NoSuchElementException, SessionNotCreatedException
     )
     SELENIUM_AVAILABLE = True
 except ImportError:
@@ -42,28 +28,15 @@ except ImportError:
 
 
 class BrowserValidator:
-    """
-    Browser-based validator for detecting false positives in dead link detection.
-    """
+    """Browser-based validator for detecting false positives in dead link detection."""
     
-    def __init__(self, headless: bool = True, timeout: int = 30, 
-                 user_agent: str = None, enable_images: bool = False):
-        """
-        Initialize the browser validator.
-        
-        Args:
-            headless: Whether to run browser in headless mode
-            timeout: Page load timeout in seconds
-            user_agent: Custom user agent string
-            enable_images: Whether to load images (faster if disabled)
-        """
+    def __init__(self, headless: bool = True, timeout: int = 30):
+        """Initialize the browser validator."""
         if not SELENIUM_AVAILABLE:
             raise ImportError("Selenium is required for browser validation. Install with: pip install selenium")
         
         self.headless = headless
         self.timeout = timeout
-        self.user_agent = user_agent or 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        self.enable_images = enable_images
         self.driver = None
         
     def _create_driver(self) -> webdriver.Chrome:
@@ -78,26 +51,17 @@ class BrowserValidator:
         options.add_argument('--disable-dev-shm-usage')
         options.add_argument('--disable-gpu')
         options.add_argument('--disable-extensions')
-        options.add_argument('--disable-plugins')
-        if not self.enable_images:
-            options.add_argument('--disable-images')
+        options.add_argument('--disable-images')
         options.add_argument('--disable-css')
         options.add_argument('--disable-background-timer-throttling')
         options.add_argument('--disable-backgrounding-occluded-windows')
         options.add_argument('--disable-renderer-backgrounding')
         options.add_argument('--disable-features=TranslateUI')
         options.add_argument('--disable-ipc-flooding-protection')
-        
-        # Additional stability options
         options.add_argument('--disable-web-security')
         options.add_argument('--disable-features=VizDisplayCompositor')
         options.add_argument('--disable-blink-features=AutomationControlled')
         options.add_argument('--disable-features=NetworkService')
-        
-        # Set user agent
-        options.add_argument(f'--user-agent={self.user_agent}')
-        
-        # Memory optimizations
         options.add_argument('--memory-pressure-off')
         options.add_argument('--max_old_space_size=4096')
         
@@ -123,16 +87,7 @@ class BrowserValidator:
             raise
     
     def validate_url_with_browser(self, url: str) -> Tuple[str, str, Optional[int], Dict]:
-        """
-        Validate a URL using browser automation.
-        
-        Args:
-            url: URL to validate
-            
-        Returns:
-            Tuple of (url, status, status_code, additional_info)
-            status can be: 'alive', 'dead', 'blocked', 'timeout', 'error'
-        """
+        """Validate a URL using browser automation."""
         if not self.driver:
             try:
                 self.driver = self._create_driver()
@@ -148,13 +103,12 @@ class BrowserValidator:
             # Navigate to the URL
             self.driver.get(url)
             
-            # Wait for page to load with shorter timeout
+            # Wait for page to load
             try:
                 WebDriverWait(self.driver, 10).until(
                     lambda driver: driver.execute_script("return document.readyState") == "complete"
                 )
             except TimeoutException:
-                # If page doesn't load completely, still check what we have
                 logger.warning(f"Page load timeout for {url}, checking current state")
             
             # Get current URL (after redirects)
@@ -173,10 +127,10 @@ class BrowserValidator:
             except:
                 additional_info['title'] = None
             
-            # Check for common error indicators in page content
+            # Check for error indicators in page content
             page_source = self.driver.page_source.lower()
             
-            # Only look for very specific error indicators that clearly indicate dead pages
+            # Clear error indicators
             clear_error_indicators = [
                 '404 not found', 'page not found', 'error 404',
                 '500 internal server error', 'internal server error',
@@ -188,7 +142,6 @@ class BrowserValidator:
                 'server not found', 'dns_probe_finished_nxdomain'
             ]
             
-            # Check for very specific error indicators
             for indicator in clear_error_indicators:
                 if indicator in page_source:
                     additional_info['error_indicator'] = indicator
@@ -208,17 +161,8 @@ class BrowserValidator:
                     additional_info['blocking_indicator'] = indicator
                     return url, 'blocked', None, additional_info
             
-            # Check if page has meaningful content
-            try:
-                body_text = self.driver.find_element(By.TAG_NAME, "body").text
-                additional_info['content_length'] = len(body_text.strip())
-            except:
-                additional_info['content_length'] = 0
-            
             # If we have a meaningful title and the page loaded, consider it alive
-            # This is the most conservative approach - if the page loads and has a title, it's probably alive
             if additional_info.get('title') and len(additional_info['title'].strip()) > 0:
-                # Only mark as dead if the title contains very clear error indicators
                 title_lower = additional_info['title'].lower()
                 title_error_indicators = ['404 not found', 'error 404', 'page not found', 'forbidden', 'server error']
                 if not any(indicator in title_lower for indicator in title_error_indicators):
@@ -249,29 +193,14 @@ class BrowserValidator:
             logger.error(f"Unexpected error validating {url}: {e}")
             return url, 'error', None, {'error': str(e)}
     
-    def validate_multiple_urls(self, urls: List[str], 
-                              progress_callback=None) -> List[Tuple[str, str, Optional[int], Dict]]:
-        """
-        Validate multiple URLs using browser automation.
-        
-        Args:
-            urls: List of URLs to validate
-            progress_callback: Optional callback for progress updates
-            
-        Returns:
-            List of validation results
-        """
+    def validate_multiple_urls(self, urls: List[str]) -> List[Tuple[str, str, Optional[int], Dict]]:
+        """Validate multiple URLs using browser automation."""
         results = []
         
-        for i, url in enumerate(urls):
-            if progress_callback:
-                progress_callback(i + 1, len(urls))
-            
+        for url in urls:
             result = self.validate_url_with_browser(url)
             results.append(result)
-            
-            # Small delay between requests
-            time.sleep(1)
+            time.sleep(1)  # Small delay between requests
         
         return results
     
@@ -294,17 +223,7 @@ class BrowserValidator:
 def validate_dead_links_with_browser(dead_links: List[Tuple[str, str, Optional[int]]], 
                                    headless: bool = True,
                                    timeout: int = 30) -> List[Tuple[str, str, Optional[int], Dict]]:
-    """
-    Validate a list of dead links using browser automation.
-    
-    Args:
-        dead_links: List of (url, status, status_code) tuples that were marked as dead
-        headless: Whether to run browser in headless mode
-        timeout: Page load timeout in seconds
-        
-    Returns:
-        List of validation results with additional browser info
-    """
+    """Validate a list of dead links using browser automation."""
     if not SELENIUM_AVAILABLE:
         logger.error("Selenium not available. Cannot perform browser validation.")
         return [(url, status, code, {'error': 'Selenium not available'}) for url, status, code in dead_links]
@@ -313,67 +232,21 @@ def validate_dead_links_with_browser(dead_links: List[Tuple[str, str, Optional[i
     urls = []
     for item in dead_links:
         if len(item) == 2:
-            # Format: (url, status_code)
             url, status_code = item
             urls.append(url)
         elif len(item) == 3:
-            # Format: (url, status, status_code)
             url, status, status_code = item
             urls.append(url)
         else:
-            # Fallback: assume first element is URL
             urls.append(item[0])
     
     with BrowserValidator(headless=headless, timeout=timeout) as validator:
         return validator.validate_multiple_urls(urls)
 
 
-def is_likely_false_positive_browser(url: str, initial_status: str, 
-                                   browser_result: Tuple[str, str, Optional[int], Dict]) -> bool:
-    """
-    Determine if a link is likely a false positive based on browser validation.
-    
-    Args:
-        url: The URL that was checked
-        initial_status: The initial status from HTTP requests
-        browser_result: The browser validation result
-        
-    Returns:
-        True if this appears to be a false positive
-    """
-    browser_url, browser_status, browser_code, browser_info = browser_result
-    
-    # If browser says it's alive but HTTP said it was dead, it's likely a false positive
-    if browser_status == 'alive' and initial_status == 'dead':
-        return True
-    
-    # If browser was redirected to a different URL, it might be a false positive
-    if browser_info.get('redirected') and browser_status == 'alive':
-        return True
-    
-    # If browser found blocking indicators, it's not a false positive
-    if browser_status == 'blocked':
-        return False
-    
-    # If browser timed out or had errors, we can't determine
-    if browser_status in ['timeout', 'error']:
-        return False
-    
-    return False
-
-
 def create_browser_validation_report(dead_links: List[Tuple[str, str, Optional[int]]],
                                    browser_results: List[Tuple[str, str, Optional[int], Dict]]) -> Dict:
-    """
-    Create a report of browser validation results.
-    
-    Args:
-        dead_links: Original dead link results
-        browser_results: Browser validation results
-        
-    Returns:
-        Dictionary with validation summary
-    """
+    """Create a report of browser validation results."""
     report = {
         'total_checked': len(dead_links),
         'confirmed_dead': 0,
@@ -431,12 +304,7 @@ def create_browser_validation_report(dead_links: List[Tuple[str, str, Optional[i
 
 
 def print_browser_validation_summary(report: Dict):
-    """
-    Print a summary of browser validation results.
-    
-    Args:
-        report: Browser validation report
-    """
+    """Print a summary of browser validation results."""
     print(f"\n🔍 Browser Validation Summary")
     print(f"=" * 40)
     print(f"Total links checked: {report['total_checked']}")
@@ -454,13 +322,6 @@ def print_browser_validation_summary(report: Dict):
                 print(f"     → Redirected to: {item['browser_info']['final_url']}")
             if item['browser_info'].get('title'):
                 print(f"     → Title: {item['browser_info']['title']}")
-    
-    if report['blocked'] > 0:
-        print(f"\n🚫 Blocked Links:")
-        for item in report['blocked_urls']:
-            print(f"   - {item['url']}")
-            if item['browser_info'].get('blocking_indicator'):
-                print(f"     → Blocked by: {item['browser_info']['blocking_indicator']}")
 
 
 if __name__ == "__main__":

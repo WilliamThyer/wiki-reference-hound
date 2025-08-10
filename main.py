@@ -2,12 +2,7 @@
 """
 Wikipedia Dead Link Checker
 
-This script fetches the top 25 most-viewed English Wikipedia articles from yesterday,
-extracts external links from their references, checks if the links are alive,
-and generates a CSV report of dead links.
-
-Usage:
-    python main.py [--limit N] [--timeout SECONDS] [--delay SECONDS]
+Checks for dead external links in top Wikipedia articles.
 """
 
 import argparse
@@ -18,14 +13,13 @@ from fetch_top_articles import get_top_articles
 from fetch_article_html import get_article_html
 from extract_references import extract_external_links, filter_links_for_checking
 from check_links import check_all_links_with_archives, check_all_links_with_archives_parallel, print_link_summary
-from generate_report import write_report, write_summary_report, print_report_summary, create_incremental_csv_writer, write_article_results_to_csv
+from generate_report import write_report, write_summary_report, print_report_summary, create_incremental_csv_writer, write_article_results_to_csv, create_comprehensive_csv_report
 from utils import clean_article_title, normalize_url, format_duration
 
 
 def main():
     """Main function to orchestrate the dead link checking process."""
     
-    # Parse command line arguments
     parser = argparse.ArgumentParser(description='Check for dead links in top Wikipedia articles')
     parser.add_argument('--limit', type=int, default=25, 
                        help='Number of articles to check (default: 25)')
@@ -81,8 +75,9 @@ def main():
     dead_links = {}
     total_links_checked = 0
     total_dead_links = 0
+    all_browser_validation_results = {}  # Store browser validation results for all articles
     
-    # Create CSV file for incremental writing
+    # Create CSV file for incremental writing (keeping for backward compatibility)
     csv_filepath, csv_writer, csv_file = create_incremental_csv_writer(args.output_dir)
     print(f"📄 CSV file created: {csv_filepath}")
     print()
@@ -113,42 +108,49 @@ def main():
             print(f"   📎 Found {len(all_links)} total links ({len(links_to_check)} to check, {links_with_archives} with archives)")
             total_links_checked += len(links_to_check)
             
-            # Check if links are alive
-            if args.browser_validation:
-                # Use enhanced link checking with browser validation
-                from enhanced_check_links import check_links_with_browser_validation
-                
-                print(f"   🔗 Checking link status with browser validation...")
-                results, browser_report = check_links_with_browser_validation(
-                    links_to_check, 
-                    archive_groups, 
-                    timeout=args.timeout, 
-                    max_workers=args.max_workers,
-                    chunk_size=args.chunk_size,
-                    browser_timeout=args.browser_timeout,
-                    browser_headless=not args.no_headless,
-                    enable_browser_validation=True
-                )
-                
-                # Store browser report for later summary
-                if hasattr(args, 'browser_reports'):
-                    args.browser_reports.append(browser_report)
-                else:
-                    args.browser_reports = [browser_report]
+            # Check link status
+            if args.parallel:
+                print(f"   🔗 Checking link status in parallel...")
+                results = check_all_links_with_archives_parallel(links_to_check, archive_groups, timeout=args.timeout, max_workers=args.max_workers)
             else:
-                # Use standard link checking
-                if args.parallel:
-                    print(f"   🔗 Checking link status (parallel, {args.max_workers} workers)...")
-                    results = check_all_links_with_archives_parallel(
-                        links_to_check, 
-                        archive_groups, 
-                        timeout=args.timeout, 
-                        max_workers=args.max_workers,
-                        chunk_size=args.chunk_size
+                print(f"   🔗 Checking link status...")
+                results = check_all_links_with_archives(links_to_check, archive_groups, timeout=args.timeout, delay=args.delay)
+            
+            # Browser validation if enabled
+            if args.browser_validation:
+                from browser_validation import validate_dead_links_with_browser, create_browser_validation_report, print_browser_validation_summary
+                
+                # Get dead links for browser validation
+                dead_for_browser = [(url, status, code) for url, status, code in results if status == 'dead']
+                
+                if dead_for_browser:
+                    print(f"   🔍 Browser validating {len(dead_for_browser)} dead links...")
+                    browser_results = validate_dead_links_with_browser(
+                        dead_for_browser,
+                        headless=not args.no_headless,
+                        timeout=args.browser_timeout
                     )
+                    
+                    # Create browser validation report
+                    browser_report = create_browser_validation_report(dead_for_browser, browser_results)
+                    print_browser_validation_summary(browser_report)
+                    
+                    # Store browser report for later summary
+                    if hasattr(args, 'browser_reports'):
+                        args.browser_reports.append(browser_report)
+                    else:
+                        args.browser_reports = [browser_report]
+                    
+                    # Store browser validation results for this article
+                    article_browser_results = {}
+                    for browser_result in browser_results:
+                        url, status, code, info = browser_result
+                        article_browser_results[url] = browser_result
+                    all_browser_validation_results[clean_title] = article_browser_results
                 else:
-                    print(f"   🔗 Checking link status...")
-                    results = check_all_links_with_archives(links_to_check, archive_groups, timeout=args.timeout, delay=args.delay)
+                    all_browser_validation_results[clean_title] = {}
+            else:
+                all_browser_validation_results[clean_title] = {}
             
             # Filter dead links (only truly dead, not archived or blocked)
             dead = [(url, code) for url, status, code in results if status == 'dead']
@@ -159,8 +161,8 @@ def main():
                 total_dead_links += len(dead)
                 print(f"   ❌ Found {len(dead)} dead links")
                 
-                # Write dead links to CSV immediately
-                write_article_results_to_csv(csv_writer, clean_title, dead)
+                # Write dead links to CSV with browser validation results (keeping incremental for backward compatibility)
+                write_article_results_to_csv(csv_writer, clean_title, dead, all_browser_validation_results.get(clean_title, {}))
                 csv_file.flush()  # Ensure data is written to disk
             else:
                 print(f"   ✅ All links are alive, archived, or blocked")
@@ -173,13 +175,19 @@ def main():
         # Ensure CSV file is closed
         csv_file.close()
     
-    # Step 3: Generate reports
-    print("📋 Generating reports...")
+    # Step 3: Generate comprehensive reports
+    print("📋 Generating comprehensive reports...")
     
     if dead_links:
-        summary_file = write_summary_report(dead_links, args.output_dir)
-        print(f"📄 CSV report saved to: {csv_filepath}")
-        print(f"📄 Summary report saved to: {summary_file}")
+        # Generate comprehensive CSV with browser validation results
+        comprehensive_csv_filepath = create_comprehensive_csv_report(dead_links, all_browser_validation_results, args.output_dir)
+        
+        # Generate enhanced summary report
+        summary_file = write_summary_report(dead_links, all_browser_validation_results, args.output_dir)
+        
+        print(f"📄 Incremental CSV report saved to: {csv_filepath}")
+        print(f"📄 Comprehensive CSV report saved to: {comprehensive_csv_filepath}")
+        print(f"📄 Enhanced summary report saved to: {summary_file}")
     else:
         print("✅ No dead links found!")
     
@@ -206,19 +214,30 @@ def main():
         total_false_positives = 0
         total_confirmed_dead = 0
         total_blocked = 0
+        total_timeout = 0
+        total_error = 0
         
         for i, report in enumerate(args.browser_reports):
             if report:  # Only process non-None reports
                 total_false_positives += report.get('false_positives', 0)
                 total_confirmed_dead += report.get('confirmed_dead', 0)
                 total_blocked += report.get('blocked', 0)
+                total_timeout += report.get('timeout', 0)
+                total_error += report.get('error', 0)
         
         print(f"Total false positives detected: {total_false_positives}")
         print(f"Total confirmed dead: {total_confirmed_dead}")
         print(f"Total blocked by bot protection: {total_blocked}")
+        print(f"Total timeout errors: {total_timeout}")
+        print(f"Total other errors: {total_error}")
         
         if total_false_positives > 0:
             print(f"🎉 Browser validation helped detect {total_false_positives} false positives!")
+            print(f"💡 Check the comprehensive CSV report for detailed browser validation results")
+        
+        print(f"\n📊 Detailed results available in:")
+        print(f"   - Comprehensive CSV: dead_links_comprehensive_*.csv")
+        print(f"   - Enhanced summary: dead_links_summary_*.txt")
     
     print("\n✅ Done!")
 
