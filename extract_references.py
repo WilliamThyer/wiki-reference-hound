@@ -249,38 +249,50 @@ def group_links_with_archives(links: List[str]) -> Dict[str, List[str]]:
 
 def filter_links_for_checking(links: List[str]) -> Tuple[List[str], Dict[str, List[str]]]:
     """
-    Filter links for checking, removing archive links and grouping with originals.
+    Filter links for checking, separating original links with and without archives.
     
     Args:
-        links: List of all URLs found
+        links: List of all URLs found (mixture of original and archive links)
         
     Returns:
-        Tuple of (links_to_check, archive_groups)
+        Tuple of (links_to_check, links_with_archives)
+        - links_to_check: original links with no matching archive link
+        - links_with_archives: original links that have archives, with key=original link and value=list of archives
     """
-    # Group links by normalized original URL
-    link_groups = group_links_with_archives(links)
+    # Separate original links and archive links
+    original_links = [link for link in links if not is_archive_url(link)]
+    archive_links = [link for link in links if is_archive_url(link)]
     
-    # For each normalized group, choose the best original URL to check
+    # Group archives by their original URL
+    archives_by_original = {}
+    for archive_url in archive_links:
+        original_url = extract_original_url_from_archive(archive_url)
+        if original_url:
+            # Find the best matching original link from our list
+            best_original = None
+            for orig_link in original_links:
+                if normalize_url_for_comparison(orig_link) == normalize_url_for_comparison(original_url):
+                    best_original = orig_link
+                    break
+            
+            if best_original:
+                if best_original not in archives_by_original:
+                    archives_by_original[best_original] = []
+                archives_by_original[best_original].append(archive_url)
+    
+    # Separate links into two categories
+    links_with_archives = {}
     links_to_check = []
-    final_archive_groups = {}
     
-    for normalized_url, archives in link_groups.items():
-        # Find all URLs that match this normalized version
-        matching_urls = []
-        for link in links:
-            if not is_archive_url(link):
-                normalized_link = normalize_url_for_comparison(link)
-                if normalized_link == normalized_url:
-                    matching_urls.append(link)
-        
-        # Find the best original URL to represent this group
-        best_original = find_best_original_url(matching_urls, preferred_protocol='https')
-        
-        if best_original:
-            links_to_check.append(best_original)
-            final_archive_groups[best_original] = archives
+    for link in original_links:
+        if link in archives_by_original:
+            # This link has archives
+            links_with_archives[link] = archives_by_original[link]
+        else:
+            # This link has no archives, so it needs to be checked
+            links_to_check.append(link)
     
-    return links_to_check, final_archive_groups
+    return links_to_check, links_with_archives
 
 
 def extract_external_links(html: str) -> List[str]:
