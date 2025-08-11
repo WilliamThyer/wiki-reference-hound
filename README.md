@@ -56,6 +56,7 @@ Options:
   --browser-timeout N    Browser page load timeout in seconds (default: 30)
   --no-headless          Run browser in visible mode (default: headless)
   --max-browser-links N  Max dead links to validate with browser (default: 50)
+  --references-only       Only extract external links from the references section (more focused)
 ```
 
 ### Examples
@@ -72,7 +73,32 @@ python main.py --parallel --max-workers 30
 
 # Enable browser validation for false positive detection
 python main.py --browser-validation --browser-timeout 20
+
+# Use references-only mode for more focused link extraction
+python main.py --references-only
 ```
+
+## Link Extraction Methods
+
+The tool offers two methods for extracting external links from Wikipedia articles:
+
+### 1. Comprehensive Extraction (Default)
+Extracts external links from the entire article content, including:
+- References section
+- Inline citations
+- External links section
+- Any other external links found in the article
+
+This method is more thorough but may include links that are not strictly citations.
+
+### 2. References-Only Extraction
+Extracts external links only from the formal references section using the `--references-only` flag. This method:
+- Focuses specifically on `<ol class="references">` elements
+- Extracts links from `<ref>` tags
+- Provides more accurate citation-only results
+- Reduces false positives from navigation or non-citation links
+
+Use this method when you want to focus specifically on academic citations and references.
 
 ## Browser Validation
 

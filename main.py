@@ -11,7 +11,7 @@ from typing import Dict, List, Tuple, Optional
 
 from fetch_top_articles import get_top_articles, get_all_time_top_articles
 from fetch_article_html import get_article_html
-from extract_references import extract_external_links, filter_links_for_checking
+from extract_references import extract_external_links, extract_external_links_from_references, filter_links_for_checking
 from check_links import check_all_links_with_archives, check_all_links_with_archives_parallel, print_link_summary
 from generate_report import write_report, write_summary_report, print_report_summary, create_incremental_csv_writer, write_article_results_to_csv, create_comprehensive_csv_report
 from utils import clean_article_title, normalize_url, format_duration
@@ -46,6 +46,8 @@ def main():
                        help='Run browser in visible mode (default: headless)')
     parser.add_argument('--max-browser-links', type=int, default=50,
                        help='Maximum number of dead links to validate with browser (default: 50)')
+    parser.add_argument('--references-only', action='store_true',
+                       help='Only extract external links from the references section (more focused)')
     
     args = parser.parse_args()
     
@@ -61,6 +63,8 @@ def main():
     if args.browser_validation:
         print(f"🔍 Browser validation enabled: {args.browser_timeout}s timeout, headless: {not args.no_headless}")
         print(f"   Max browser validation links: {args.max_browser_links}")
+    if args.references_only:
+        print(f"🎯 References-only mode enabled: Only extracting links from references section")
     print()
     
     start_time = time.time()
@@ -103,7 +107,13 @@ def main():
                 continue
             
             # Extract external links
-            all_links = extract_external_links(html)
+            if args.references_only:
+                all_links = extract_external_links_from_references(html)
+                print(f"   🎯 Using references-only extraction method")
+            else:
+                all_links = extract_external_links(html)
+                print(f"   🔍 Using comprehensive extraction method")
+            
             if not all_links:
                 print(f"   ℹ️  No external links found in '{clean_title}'")
                 continue
@@ -294,9 +304,16 @@ def test_individual_components():
         if html:
             # Test extracting links
             print("\n3. Testing extract_references...")
+            print("   Testing comprehensive method:")
             links = extract_external_links(html)
             print(f"   Found {len(links)} external links")
             for i, link in enumerate(links[:3], 1):
+                print(f"   {i}. {link}")
+            
+            print("   Testing references-only method:")
+            ref_links = extract_external_links_from_references(html)
+            print(f"   Found {len(ref_links)} external links from references only")
+            for i, link in enumerate(ref_links[:3], 1):
                 print(f"   {i}. {link}")
             
             if links:

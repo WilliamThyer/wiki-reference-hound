@@ -165,14 +165,13 @@ def check_all_links_with_archives(links: List[str], archive_groups: Dict[str, Li
         # Check if this original link has archives available
         has_archives = link in archive_groups and archive_groups[link]
         
-        # Always check the original link status, regardless of whether archives exist
+        # If the link has archives available, mark it as archived and skip checking
+        if has_archives:
+            results.append((link, 'archived', None))
+            continue
+        
+        # Only check links that don't have archives available
         result = check_link_status(link, timeout)
-        
-        # If the link is dead but has archives, note that archives are available
-        if result[1] == 'dead' and has_archives:
-            # Keep the 'dead' status but we could add archive info if needed
-            pass
-        
         results.append(result)
         
         # Small delay to be respectful to servers
@@ -191,10 +190,13 @@ def check_all_links_with_archives_parallel(links: List[str], archive_groups: Dic
     
     results = []
     
-    # Filter out actual archive URLs first
+    # Filter out actual archive URLs and links that have archives available
     links_to_check = []
     for link in links:
         if is_archive_url(link):
+            results.append((link, 'archived', None))
+        elif link in archive_groups and archive_groups[link]:
+            # If the link has archives available, mark it as archived and skip checking
             results.append((link, 'archived', None))
         else:
             links_to_check.append(link)

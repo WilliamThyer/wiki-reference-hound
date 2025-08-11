@@ -1,12 +1,15 @@
 from bs4 import BeautifulSoup
 from typing import List, Set, Dict, Tuple
 import re
+from fetch_article_html import get_article_html
 
 
 def normalize_url_for_comparison(url: str) -> str:
     """
     Normalize a URL for comparison purposes.
     Treats HTTP and HTTPS versions of the same domain as equivalent.
+    Also treats www and non-www versions of the same domain as equivalent.
+    Handles common domain variations like .com/.co.uk/.org variations.
     
     Args:
         url: URL to normalize
@@ -16,15 +19,58 @@ def normalize_url_for_comparison(url: str) -> str:
     """
     # Remove protocol for comparison
     if url.startswith('https://'):
-        return url[8:]  # Remove 'https://'
+        url = url[8:]  # Remove 'https://'
     elif url.startswith('http://'):
-        return url[7:]   # Remove 'http://'
+        url = url[7:]   # Remove 'http://'
+    
+    # Remove 'www.' prefix for comparison (treats www.domain.com and domain.com as equivalent)
+    if url.startswith('www.'):
+        url = url[4:]  # Remove 'www.'
+    
+    # Handle common domain variations
+    # Extract domain part (everything before the first slash)
+    domain_part = url.split('/')[0] if '/' in url else url
+    
+    # Common domain variations mapping
+    domain_variations = {
+        '.co.uk': '.com',      # UK sites often have .com equivalents
+        '.co.za': '.com',      # South African sites
+        '.co.au': '.com',      # Australian sites
+        '.co.nz': '.com',      # New Zealand sites
+        '.co.in': '.com',      # Indian sites
+        '.co.jp': '.com',      # Japanese sites
+        '.co.kr': '.com',      # Korean sites
+        '.co.il': '.com',      # Israeli sites
+        '.com.au': '.com',     # Australian sites
+        '.com.br': '.com',     # Brazilian sites
+        '.com.mx': '.com',     # Mexican sites
+        '.com.sg': '.com',     # Singapore sites
+        '.com.hk': '.com',     # Hong Kong sites
+        '.com.tw': '.com',     # Taiwanese sites
+        '.com.my': '.com',     # Malaysian sites
+        '.com.ph': '.com',     # Philippine sites
+        '.com.vn': '.com',     # Vietnamese sites
+        '.com.th': '.com',     # Thai sites
+        '.com.id': '.com',     # Indonesian sites
+    }
+    
+    # Apply domain variations
+    for old_suffix, new_suffix in domain_variations.items():
+        if domain_part.endswith(old_suffix):
+            domain_part = domain_part[:-len(old_suffix)] + new_suffix
+            # Reconstruct the URL with the modified domain
+            if '/' in url:
+                url = domain_part + '/' + '/'.join(url.split('/')[1:])
+            else:
+                url = domain_part
+            break
+    
     return url
 
 
 def is_same_domain(url1: str, url2: str) -> bool:
     """
-    Check if two URLs point to the same domain, ignoring protocol.
+    Check if two URLs point to the same domain, ignoring protocol and common variations.
     
     Args:
         url1: First URL
@@ -41,6 +87,41 @@ def is_same_domain(url1: str, url2: str) -> bool:
     domain2 = normalized2.split('/')[0] if '/' in normalized2 else normalized2
     
     return domain1 == domain2
+
+
+def is_url_equivalent(url1: str, url2: str) -> bool:
+    """
+    Check if two URLs are equivalent, considering domain variations and path similarities.
+    """
+    if not url1 or not url2:
+        return False
+
+    # Normalize protocol differences and strip trailing slashes for robust comparison
+    def _basic_normalize(u: str) -> str:
+        u = u.strip()
+        if u.startswith("https://"):
+            u = u[8:]
+        elif u.startswith("http://"):
+            u = u[7:]
+        u = u.lower().rstrip("/")
+        return u
+
+    if _basic_normalize(url1) == _basic_normalize(url2):
+        return True
+
+    # Original logic for more complex path/domain matching
+    if normalize_url_for_comparison(url1) == normalize_url_for_comparison(url2):
+        return True
+    
+    if is_same_domain(url1, url2):
+        path1 = url1.split('/', 3)[-1] if len(url1.split('/', 3)) > 3 else ""
+        path2 = url2.split('/', 3)[-1] if len(url2.split('/', 3)) > 3 else ""
+        if path1 == path2:
+            return True
+        if path1 and path2 and (path1 in path2 or path2 in path1):
+            return True
+
+    return False
 
 
 def find_best_original_url(urls: List[str], preferred_protocol: str = 'https') -> str:
@@ -102,9 +183,9 @@ def is_archive_url(url: str) -> bool:
         'archive.ph',
         'archive.li',
         'archive.vn',
-        'archive.today',
         'webcitation.org',
-        'wayback.archive.org'
+        'wayback.archive.org',
+        'ghostarchive.org'  # Added missing archive service
     ]
     
     for domain in archive_domains:
@@ -127,7 +208,15 @@ def extract_original_url_from_archive(archive_url: str) -> str:
     # Handle web.archive.org URLs
     if 'web.archive.org' in archive_url:
         # Pattern: https://web.archive.org/web/TIMESTAMP/ORIGINAL_URL
-        match = re.search(r'https://web\.archive\.org/web/\d+/(.+)', archive_url)
+        # Handle both HTTP and HTTPS protocols
+        match = re.search(r'https?://web\.archive\.org/web/\d+/(.+)', archive_url)
+        if match:
+            return match.group(1)
+    
+    # Handle ghostarchive.org URLs
+    elif 'ghostarchive.org' in archive_url:
+        # Pattern: https://ghostarchive.org/archive/TIMESTAMP/ORIGINAL_URL
+        match = re.search(r'https://ghostarchive\.org/archive/\d+/(.+)', archive_url)
         if match:
             return match.group(1)
     
@@ -191,12 +280,8 @@ def is_valid_archive_match(original_url: str, archive_url: str) -> bool:
     if not extracted_original:
         return False
     
-    # Normalize both URLs for comparison
-    normalized_original = normalize_url_for_comparison(original_url)
-    normalized_extracted = normalize_url_for_comparison(extracted_original)
-    
-    # Check if they match
-    return normalized_original == normalized_extracted
+    # Use the new URL equivalence function for better matching
+    return is_url_equivalent(original_url, extracted_original)
 
 
 def group_links_with_archives(links: List[str]) -> Dict[str, List[str]]:
@@ -215,34 +300,34 @@ def group_links_with_archives(links: List[str]) -> Dict[str, List[str]]:
         if is_archive_url(link):
             original = extract_original_url_from_archive(link)
             if original:
-                # Normalize the original URL for grouping
-                normalized_original = normalize_url_for_comparison(original)
-                if normalized_original not in link_groups:
-                    link_groups[normalized_original] = []
-                link_groups[normalized_original].append(link)
+                # Find the best matching original link from our list
+                best_original = None
+                for orig_link in links:
+                    if not is_archive_url(orig_link) and is_url_equivalent(orig_link, original):
+                        best_original = orig_link
+                        break
+                
+                if best_original:
+                    # Use the actual original URL as the key
+                    if best_original not in link_groups:
+                        link_groups[best_original] = []
+                    link_groups[best_original].append(link)
         else:
-            # This is an original link - normalize it for grouping
-            normalized = normalize_url_for_comparison(link)
-            if normalized not in link_groups:
-                link_groups[normalized] = []
+            # This is an original link - ensure it's in the groups
+            if link not in link_groups:
+                link_groups[link] = []
     
     # Validate archive matches and clean up any invalid ones
     validated_groups = {}
-    for normalized_url, archives in link_groups.items():
-        # Find the original URL that corresponds to this normalized version
-        original_urls = [url for url in links if not is_archive_url(url) and normalize_url_for_comparison(url) == normalized_url]
+    for original_url, archives in link_groups.items():
+        # Validate each archive against the original URL
+        valid_archives = []
+        for archive in archives:
+            if is_valid_archive_match(original_url, archive):
+                valid_archives.append(archive)
         
-        if original_urls:
-            # Validate each archive against the original URLs
-            valid_archives = []
-            for archive in archives:
-                for original in original_urls:
-                    if is_valid_archive_match(original, archive):
-                        valid_archives.append(archive)
-                        break
-            
-            if valid_archives:
-                validated_groups[normalized_url] = valid_archives
+        if valid_archives:
+            validated_groups[original_url] = valid_archives
     
     return validated_groups
 
@@ -271,7 +356,7 @@ def filter_links_for_checking(links: List[str]) -> Tuple[List[str], Dict[str, Li
             # Find the best matching original link from our list
             best_original = None
             for orig_link in original_links:
-                if normalize_url_for_comparison(orig_link) == normalize_url_for_comparison(original_url):
+                if is_url_equivalent(orig_link, original_url):
                     best_original = orig_link
                     break
             
@@ -295,9 +380,64 @@ def filter_links_for_checking(links: List[str]) -> Tuple[List[str], Dict[str, Li
     return links_to_check, links_with_archives
 
 
+def get_wikipedia_references(title: str) -> List[str]:
+    """
+    Fetch the references (citations) from a Wikipedia article.
+
+    Args:
+        title: The title of the Wikipedia article
+
+    Returns:
+        A list of HTML strings, each representing one reference
+    """
+    html = get_article_html(title)
+    if not html:
+        return []
+
+    soup = BeautifulSoup(html, 'html.parser')
+
+    # Find all reference list containers
+    references_ol = soup.find_all("ol", class_="references")
+
+    all_refs = []
+    for ol in references_ol:
+        for li in ol.find_all("li", recursive=False):
+            all_refs.append(str(li))
+
+    return all_refs
+
+
+def get_wikipedia_references_from_html(html: str) -> List[str]:
+    """
+    Extract the references (citations) from Wikipedia article HTML content.
+    This function specifically targets only the references section.
+
+    Args:
+        html: Raw HTML content of the Wikipedia article
+
+    Returns:
+        A list of HTML strings, each representing one reference
+    """
+    if not html:
+        return []
+
+    soup = BeautifulSoup(html, 'html.parser')
+    all_refs = []
+
+    # Find all reference list containers
+    references_ol = soup.find_all("ol", class_="references")
+
+    for ol in references_ol:
+        for li in ol.find_all("li", recursive=False):
+            all_refs.append(str(li))
+
+    return all_refs
+
+
 def extract_external_links(html: str) -> List[str]:
     """
     Extract external links from Wikipedia article HTML content.
+    This function now specifically targets only the references section for more accurate results.
     
     Args:
         html: Raw HTML content of the Wikipedia article
@@ -353,6 +493,48 @@ def extract_external_links(html: str) -> List[str]:
         if is_external_url(href):
             # Only add if it looks like a reference link (not navigation, etc.)
             if is_likely_reference_link(link):
+                external_links.add(href)
+    
+    return list(external_links)
+
+
+def extract_external_links_from_references(html: str) -> List[str]:
+    """
+    Extract external links ONLY from the references section of a Wikipedia article.
+    This provides a more focused approach than extract_external_links.
+    
+    Args:
+        html: Raw HTML content of the Wikipedia article
+        
+    Returns:
+        List of external URLs found only in the references section
+    """
+    if not html:
+        return []
+    
+    soup = BeautifulSoup(html, 'html.parser')
+    external_links = set()
+    
+    # Find all reference list containers (ol with class="references")
+    references_ol = soup.find_all("ol", class_="references")
+    
+    for ol in references_ol:
+        # Extract all <li> elements from each reference list
+        for li in ol.find_all("li", recursive=False):
+            # Find all <a> tags within each reference
+            links = li.find_all('a', href=True)
+            for link in links:
+                href = link['href']
+                if is_external_url(href):
+                    external_links.add(href)
+    
+    # Also look for <ref> tags that might contain external links
+    ref_tags = soup.find_all('ref')
+    for ref in ref_tags:
+        links = ref.find_all('a', href=True)
+        for link in links:
+            href = link['href']
+            if is_external_url(href):
                 external_links.add(href)
     
     return list(external_links)
