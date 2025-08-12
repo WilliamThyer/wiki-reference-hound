@@ -74,6 +74,9 @@ class BrowserValidator:
             driver.set_page_load_timeout(self.timeout)
             driver.implicitly_wait(5)
             
+            # Set ChromeDriver HTTP connection timeout to match page load timeout
+            driver.command_executor._conn.timeout = self.timeout
+            
             # Execute script to remove webdriver property
             driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
             
@@ -130,11 +133,16 @@ class BrowserValidator:
             # Check for error indicators in page content
             page_source = self.driver.page_source.lower()
             
+            # Check for specific access denied pattern that indicates blocking
+            if 'error: access denied' in page_source and 'title: access denied' in page_source:
+                additional_info['blocking_indicator'] = 'access denied'
+                return url, 'blocked', None, additional_info
+            
             # Clear error indicators
             clear_error_indicators = [
                 '404 not found', 'page not found', 'error 404',
                 '500 internal server error', 'internal server error',
-                '403 forbidden', 'access denied',
+                '403 forbidden',
                 '410 gone', 'resource no longer available',
                 'this page cannot be displayed',
                 'the requested url was not found',
@@ -153,7 +161,8 @@ class BrowserValidator:
                 'bot detected', 'automated access',
                 'cloudflare', 'ddos protection',
                 'please verify you are human',
-                'checking your browser'
+                'checking your browser',
+                'access denied'
             ]
             
             for indicator in blocking_indicators:

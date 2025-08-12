@@ -126,13 +126,6 @@ def main():
             
             print(f"   📎 Found {len(all_links)} total links ({len(links_to_check)} to check, {links_with_archives} with archives)")
             
-            # Show which links have archives (for debugging/transparency)
-            if links_with_archives > 0:
-                print(f"   📦 Links with archives available:")
-                for link, archives in archive_groups.items():
-                    if archives:
-                        print(f"      - {link} → {len(archives)} archive(s)")
-            
             total_links_checked += len(links_to_check)
             
             # Check link status
