@@ -1,6 +1,7 @@
 import os
 from typing import Dict, List, Tuple, Optional
 from datetime import datetime
+from extract_references import is_archive_url
 import polars as pl
 
 
@@ -52,6 +53,7 @@ def build_all_references_table(all_links: Dict[str, List[str]],
         link_results_lookup = {url: (status, code) for url, status, code in article_link_results}
 
         for url in links:
+            is_archive = is_archive_url(url)
             has_archive = bool(url in article_archives and article_archives[url])
 
             error_code: str
@@ -100,6 +102,7 @@ def build_all_references_table(all_links: Dict[str, List[str]],
             records.append({
                 'article_title': article_title,
                 'url': url,
+                'is_archive': is_archive,
                 'has_archive': has_archive,
                 'error_code': error_code,
                 'timestamp': generation_timestamp,
@@ -110,6 +113,7 @@ def build_all_references_table(all_links: Dict[str, List[str]],
     df = pl.DataFrame(records, schema={
         'article_title': pl.Utf8,
         'url': pl.Utf8,
+        'is_archive': pl.Boolean,
         'has_archive': pl.Boolean,
         'error_code': pl.Utf8,
         'timestamp': pl.Utf8,
@@ -120,6 +124,7 @@ def build_all_references_table(all_links: Dict[str, List[str]],
     return df.select([
         'article_title',
         'url',
+        'is_archive',
         'has_archive',
         'error_code',
         'timestamp',

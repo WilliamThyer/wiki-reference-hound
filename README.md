@@ -149,6 +149,7 @@ wikipedia-dead-ref-finder/
 The CSV file contains the following columns for every reference link found:
 - `article_title`: Name of the Wikipedia article
 - `url`: The reference URL
+- `is_archive`: Whether the URL itself is an archive link
 - `has_archive`: Whether a valid archive URL exists for this reference
 - `error_code`: For links that were checked (no archive available), the HTTP status code or a label such as `CONNECTION_ERROR`, `BLOCKED`, `ERROR`, or `Not checked`
 - `timestamp`: When the table was generated
