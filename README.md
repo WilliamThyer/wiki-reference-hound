@@ -7,7 +7,7 @@ A Python tool that automatically checks for dead external links in the top 25 mo
 - **Fetches top articles**: Gets the most-viewed Wikipedia articles from yesterday using the Wikimedia REST API
 - **Extracts external links**: Parses HTML content to find external links in references and citations
 - **Checks link status**: Uses HTTP HEAD/GET requests to verify if links are alive
-- **Generates reports**: Creates CSV and text reports of dead links found
+- **Generates primary table**: Builds a comprehensive ALL references table (Polars DataFrame) and writes it to CSV
 - **Progress tracking**: Shows real-time progress with progress bars
 - **Rate limiting**: Respectful to servers with configurable delays
 - **Parallel processing**: Optional parallel processing for faster checking
@@ -30,14 +30,13 @@ python main.py
 This will:
 - Fetch the top 25 most-viewed Wikipedia articles from yesterday
 - Extract external links from each article
-- Check if each link is alive
-- Generate reports in the `output/` directory
+- Check if each link is alive (skipping ones with valid archives)
+- Generate the ALL references CSV in the `output/` directory
 
 ### 3. View Results
 
 Check the `output/` directory for:
-- `dead_links_report_YYYYMMDD_HHMMSS.csv` - Detailed CSV report
-- `dead_links_summary_YYYYMMDD_HHMMSS.txt` - Human-readable summary
+- `all_references_report_YYYYMMDD_HHMMSS.csv` - The project’s primary artifact
 
 ## Configuration Options
 
@@ -134,32 +133,27 @@ wikipedia-dead-ref-finder/
 ├── fetch_article_html.py   # Retrieves article HTML content
 ├── extract_references.py   # Extracts external links from HTML
 ├── check_links.py         # Checks if links are alive
-├── generate_report.py     # Generates CSV and summary reports
+├── generate_report.py     # Builds the ALL references Polars table and writes CSV
 ├── browser_validation.py  # Browser automation for false positive detection
 ├── utils.py              # Utility functions
 ├── requirements.txt      # Python dependencies
 ├── README.md            # This file
 └── output/              # Generated reports (created automatically)
-    ├── dead_links_report_YYYYMMDD_HHMMSS.csv
-    └── dead_links_summary_YYYYMMDD_HHMMSS.txt
+    └── all_references_report_YYYYMMDD_HHMMSS.csv
 ```
 
 ## Output Format
 
-### CSV Report
+### ALL References CSV
 
-The CSV file contains the following columns:
+The CSV file contains the following columns for every reference link found:
 - `article_title`: Name of the Wikipedia article
-- `url`: The dead external link
-- `status_code`: HTTP status code (or "CONNECTION_ERROR")
-- `timestamp`: When the check was performed
-
-### Summary Report
-
-The text summary includes:
-- Total statistics (articles processed, links checked, dead links found)
-- Status code breakdown
-- List of articles with dead links and their URLs
+- `url`: The reference URL
+- `has_archive`: Whether a valid archive URL exists for this reference
+- `error_code`: For links that were checked (no archive available), the HTTP status code or a label such as `CONNECTION_ERROR`, `BLOCKED`, `ERROR`, or `Not checked`
+- `timestamp`: When the table was generated
+- `browser_validation_check`: If browser validation was used, the outcome for the URL (`alive`, `dead`, `blocked`, `timeout`, `error`, or `Not checked`)
+- `browser_validation_check_detail`: Concise detail collected during validation (if any)
 
 ## Dependencies
 
@@ -168,6 +162,7 @@ The text summary includes:
 - **tqdm**: Progress bars for better UX
 - **selenium**: Browser automation for false positive detection (optional)
 - **webdriver-manager**: Automatic ChromeDriver management (optional)
+- **polars**: High-performance DataFrame library used to build the primary table
 
 ## Testing
 
