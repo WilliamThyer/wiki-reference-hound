@@ -13,7 +13,7 @@ from fetch_top_articles import get_top_articles, get_all_time_top_articles
 from fetch_article_html import get_article_html
 from extract_references import extract_external_links, extract_external_links_from_references, filter_links_for_checking
 from check_links import check_all_links_with_archives, check_all_links_with_archives_parallel, print_link_summary
-from generate_report import write_report, write_summary_report, print_report_summary, create_incremental_csv_writer, write_article_results_to_csv, create_comprehensive_csv_report
+from generate_report import write_report, write_summary_report, print_report_summary, create_incremental_csv_writer, write_article_results_to_csv, create_comprehensive_csv_report, create_all_references_csv_report
 from utils import clean_article_title, normalize_url, format_duration
 
 
@@ -85,6 +85,9 @@ def main():
     
     # Step 2: Process each article
     dead_links = {}
+    all_links = {}  # Store all links found for each article
+    archive_groups_all = {}  # Store archive groups for all articles
+    all_link_results = {}  # Store complete link checking results for all articles
     total_links_checked = 0
     total_dead_links = 0
     total_archived_links = 0  # Track total archived links
@@ -108,23 +111,27 @@ def main():
             
             # Extract external links
             if args.references_only:
-                all_links = extract_external_links_from_references(html)
+                article_links = extract_external_links_from_references(html)
                 print(f"   🎯 Using references-only extraction method")
             else:
-                all_links = extract_external_links(html)
+                article_links = extract_external_links(html)
                 print(f"   🔍 Using comprehensive extraction method")
             
-            if not all_links:
+            if not article_links:
                 print(f"   ℹ️  No external links found in '{clean_title}'")
                 continue
             
             # Filter links for checking (remove archives, group with originals)
-            links_to_check, archive_groups = filter_links_for_checking(all_links)
+            links_to_check, archive_groups = filter_links_for_checking(article_links)
+            
+            # Store all links and archive groups for this article
+            all_links[clean_title] = article_links
+            archive_groups_all[clean_title] = archive_groups
             
             # Count links that actually have archives
             links_with_archives = sum(1 for archives in archive_groups.values() if archives)
             
-            print(f"   📎 Found {len(all_links)} total links ({len(links_to_check)} to check, {links_with_archives} with archives)")
+            print(f"   📎 Found {len(article_links)} total links ({len(links_to_check)} to check, {links_with_archives} with archives)")
             
             total_links_checked += len(links_to_check)
             
@@ -135,6 +142,9 @@ def main():
             else:
                 print(f"   🔗 Checking link status...")
                 results = check_all_links_with_archives(links_to_check, archive_groups, timeout=args.timeout, delay=args.delay)
+            
+            # Store complete link checking results for this article
+            all_link_results[clean_title] = results
             
             # Browser validation if enabled
             if args.browser_validation:
@@ -203,8 +213,17 @@ def main():
     # Step 3: Generate comprehensive reports
     print("📋 Generating comprehensive reports...")
     
+    # Generate the new comprehensive CSV with ALL reference links
+    all_references_csv_filepath = create_all_references_csv_report(
+        all_links, 
+        archive_groups_all, 
+        all_link_results,  # Pass complete link results instead of just dead_links
+        all_browser_validation_results, 
+        args.output_dir
+    )
+    
     if dead_links:
-        # Generate comprehensive CSV with browser validation results
+        # Generate comprehensive CSV with browser validation results (keeping for backward compatibility)
         comprehensive_csv_filepath = create_comprehensive_csv_report(dead_links, all_browser_validation_results, args.output_dir)
         
         # Generate enhanced summary report
@@ -215,6 +234,8 @@ def main():
         print(f"📄 Enhanced summary report saved to: {summary_file}")
     else:
         print("✅ No dead links found!")
+    
+    print(f"📄 All References CSV report saved to: {all_references_csv_filepath}")
     
     # Step 4: Print final summary
     end_time = time.time()

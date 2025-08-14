@@ -341,6 +341,120 @@ def print_report_summary(dead_links: Dict[str, List[Tuple[str, Optional[int]]]])
         print(f"   ... and {len(sorted_articles) - 5} more articles")
 
 
+def create_all_references_csv_report(all_links: Dict[str, List[str]], 
+                                   archive_groups: Dict[str, Dict[str, List[str]]],
+                                   all_link_results: Dict[str, List[Tuple[str, str, Optional[int]]]] = None,
+                                   browser_validation_results: Dict[str, Dict[str, Tuple[str, str, Optional[int], Dict]]] = None,
+                                   output_dir: str = "output") -> str:
+    """
+    Create a comprehensive CSV report with ALL reference links, including those with and without archives.
+    
+    Args:
+        all_links: Dictionary mapping article titles to lists of all URLs found
+        archive_groups: Dictionary mapping article titles to archive groups for that article
+        all_link_results: Dictionary mapping article titles to complete link checking results (url, status, status_code)
+        browser_validation_results: Dictionary mapping article titles to browser validation results
+        output_dir: Directory to save the report (default: "output")
+        
+    Returns:
+        Path to the generated CSV file
+    """
+    # Create output directory if it doesn't exist
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Generate filename with timestamp
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"all_references_report_{timestamp}.csv"
+    filepath = os.path.join(output_dir, filename)
+    
+    with open(filepath, 'w', newline='', encoding='utf-8') as csvfile:
+        writer = csv.writer(csvfile)
+        
+        # Write header with new columns
+        writer.writerow(['article_title', 'url', 'has_archive', 'error_code', 'timestamp', 'browser_validation_check', 'browser_validation_check_detail'])
+        
+        # Write data for each article
+        for article_title, links in all_links.items():
+            article_archives = archive_groups.get(article_title, {})
+            article_link_results = all_link_results.get(article_title, []) if all_link_results else []
+            article_browser_results = browser_validation_results.get(article_title, {}) if browser_validation_results else {}
+            
+            # Create a lookup dictionary for link results: url -> (status, status_code)
+            link_results_lookup = {url: (status, code) for url, status, code in article_link_results}
+            
+            for url in links:
+                # Check if this URL has archives
+                has_archive = bool(url in article_archives and article_archives[url])
+                
+                # Determine error_code
+                if has_archive:
+                    error_code = 'None'
+                    browser_validation_check = 'Browser validation not performed.'
+                    browser_validation_check_detail = ''
+                else:
+                    # Check if this URL was checked and get its status
+                    if url in link_results_lookup:
+                        status, status_code = link_results_lookup[url]
+                        if status == 'dead':
+                            error_code = status_code if status_code is not None else 'CONNECTION_ERROR'
+                        elif status == 'blocked':
+                            error_code = status_code if status_code is not None else 'BLOCKED'
+                        elif status == 'alive':
+                            error_code = 'None'
+                        else:
+                            error_code = status_code if status_code is not None else 'ERROR'
+                    else:
+                        error_code = 'Not checked'  # Link wasn't checked
+                    
+                    # Get browser validation result for this URL if available
+                    browser_result = "Not checked"
+                    browser_detail = ""
+                    if url in article_browser_results:
+                        browser_status, browser_code, browser_info = article_browser_results[url][1:4]
+                        browser_result = browser_status
+                        browser_detail = ""
+                        
+                        if browser_info:
+                            details = []
+                            if browser_info.get('error_indicator'):
+                                details.append(f"Error: {browser_info['error_indicator']}")
+                            if browser_info.get('blocking_indicator'):
+                                details.append(f"Blocked: {browser_info['blocking_indicator']}")
+                            if browser_info.get('final_url') and browser_info.get('final_url') != url:
+                                details.append(f"Redirected to: {browser_info['final_url']}")
+                            if browser_info.get('title'):
+                                details.append(f"Title: {browser_info['title']}")
+                            
+                            browser_detail = "; ".join(details)
+                    else:
+                        # If no browser validation, use the link status from checking
+                        if url in link_results_lookup:
+                            status, _ = link_results_lookup[url]
+                            if status == 'alive':
+                                browser_result = "alive"
+                            elif status == 'blocked':
+                                browser_result = "blocked"
+                            elif status == 'dead':
+                                browser_result = "dead"
+                            else:
+                                browser_result = status
+                    
+                    browser_validation_check = browser_result
+                    browser_validation_check_detail = browser_detail
+                
+                writer.writerow([
+                    article_title,
+                    url,
+                    has_archive,
+                    error_code,
+                    datetime.now().strftime("%Y%m%d_%H%M%S"),
+                    browser_validation_check,
+                    browser_validation_check_detail
+                ])
+    
+    return filepath
+
+
 if __name__ == "__main__":
     # Test the function with sample data
     test_dead_links = {
