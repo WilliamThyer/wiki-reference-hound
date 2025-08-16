@@ -87,6 +87,7 @@ def main():
     dead_links = {}
     all_links = {}  # Store all links found for each article
     archive_groups_all = {}  # Store archive groups for all articles
+    fuzzy_archive_matches_all = {}  # Store fuzzy archive matches for all articles
     all_link_results = {}  # Store complete link checking results for all articles
     total_links_checked = 0
     total_dead_links = 0
@@ -117,16 +118,18 @@ def main():
             continue
             
         # Filter links for checking (remove archives, group with originals)
-        links_to_check, archive_groups = filter_links_for_checking(article_links)
+        links_to_check, archive_groups, fuzzy_archive_matches = filter_links_for_checking(article_links)
             
         # Store all links and archive groups for this article
         all_links[clean_title] = article_links
         archive_groups_all[clean_title] = archive_groups
+        fuzzy_archive_matches_all[clean_title] = fuzzy_archive_matches
             
         # Count links that actually have archives
         links_with_archives = sum(1 for archives in archive_groups.values() if archives)
+        links_with_fuzzy_archives = len(fuzzy_archive_matches)
             
-        print(f"   📎 Found {len(article_links)} total links ({len(links_to_check)} to check, {links_with_archives} with archives)")
+        print(f"   📎 Found {len(article_links)} total links ({len(links_to_check)} to check, {links_with_archives} with archives, {links_with_fuzzy_archives} with fuzzy archive matches)")
             
         total_links_checked += len(links_to_check)
             
@@ -205,6 +208,7 @@ def main():
     all_references_csv_filepath = create_all_references_csv_report(
         all_links, 
         archive_groups_all, 
+        fuzzy_archive_matches_all,  # Pass fuzzy archive matches
         all_link_results,  # Pass complete link results instead of just dead_links
         all_browser_validation_results, 
         args.output_dir
@@ -216,6 +220,9 @@ def main():
     end_time = time.time()
     duration = end_time - start_time
     
+    # Count total fuzzy archive matches
+    total_fuzzy_archive_matches = sum(len(fuzzy_matches) for fuzzy_matches in fuzzy_archive_matches_all.values())
+    
     print()
     print("🎯 Final Summary")
     print("=" * 20)
@@ -225,6 +232,9 @@ def main():
     
     if total_archived_links > 0:
         print(f"📦 Total archive URLs found: {total_archived_links}")
+    
+    if total_fuzzy_archive_matches > 0:
+        print(f"🔍 Total fuzzy archive matches found: {total_fuzzy_archive_matches}")
     
     print(f"⏱️  Total time: {format_duration(duration)}")
     

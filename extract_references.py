@@ -1,5 +1,5 @@
 from bs4 import BeautifulSoup
-from typing import List, Set, Dict, Tuple
+from typing import List, Set, Dict, Tuple, Optional
 import re
 from fetch_article_html import get_article_html
 
@@ -332,17 +332,19 @@ def group_links_with_archives(links: List[str]) -> Dict[str, List[str]]:
     return validated_groups
 
 
-def filter_links_for_checking(links: List[str]) -> Tuple[List[str], Dict[str, List[str]]]:
+def filter_links_for_checking(links: List[str]) -> Tuple[List[str], Dict[str, List[str]], Dict[str, str]]:
     """
     Filter links for checking, separating original links with and without archives.
+    Also finds fuzzy archive matches for links without exact matches.
     
     Args:
         links: List of all URLs found (mixture of original and archive links)
         
     Returns:
-        Tuple of (links_to_check, links_with_archives)
+        Tuple of (links_to_check, links_with_archives, fuzzy_archive_matches)
         - links_to_check: original links with no matching archive link
         - links_with_archives: original links that have archives, with key=original link and value=list of archives
+        - fuzzy_archive_matches: original links with fuzzy archive matches, with key=original link and value=best fuzzy archive
     """
     # Separate original links and archive links
     original_links = [link for link in links if not is_archive_url(link)]
@@ -377,7 +379,10 @@ def filter_links_for_checking(links: List[str]) -> Tuple[List[str], Dict[str, Li
             # This link has no archives, so it needs to be checked
             links_to_check.append(link)
     
-    return links_to_check, links_with_archives
+    # Find fuzzy archive matches for links without exact matches
+    fuzzy_archive_matches = find_fuzzy_archive_matches(links_to_check, archive_links, similarity_threshold=0.7)
+    
+    return links_to_check, links_with_archives, fuzzy_archive_matches
 
 
 def get_wikipedia_references(title: str) -> List[str]:
@@ -623,6 +628,168 @@ def extract_all_links(html: str) -> List[str]:
             external_links.add(href)
     
     return list(external_links)
+
+
+def fuzzy_match_archive_url(original_url: str, all_archive_urls: List[str], similarity_threshold: float = 0.7) -> Optional[str]:
+    """
+    Find the best fuzzy match for an archive URL when exact matching fails.
+    
+    Args:
+        original_url: The original URL to find an archive for
+        all_archive_urls: List of all available archive URLs
+        similarity_threshold: Minimum similarity score to consider a match (0.0 to 1.0)
+        
+    Returns:
+        Best matching archive URL if found, None otherwise
+    """
+    if not original_url or not all_archive_urls:
+        return None
+    
+    best_match = None
+    best_score = 0.0
+    
+    # Normalize the original URL for comparison
+    normalized_original = normalize_url_for_comparison(original_url)
+    
+    for archive_url in all_archive_urls:
+        # Extract the original URL from the archive
+        extracted_original = extract_original_url_from_archive(archive_url)
+        if not extracted_original:
+            continue
+        
+        # Normalize the extracted URL
+        normalized_extracted = normalize_url_for_comparison(extracted_original)
+        
+        # Calculate similarity score
+        similarity = calculate_url_similarity(normalized_original, normalized_extracted)
+        
+        if similarity > best_score and similarity >= similarity_threshold:
+            best_score = similarity
+            best_match = archive_url
+    
+    return best_match
+
+
+def calculate_url_similarity(url1: str, url2: str) -> float:
+    """
+    Calculate similarity between two URLs using multiple metrics.
+    
+    Args:
+        url1: First normalized URL
+        url2: Second normalized URL
+        
+    Returns:
+        Similarity score between 0.0 and 1.0
+    """
+    if not url1 or not url2:
+        return 0.0
+    
+    # Exact match gets highest score
+    if url1 == url2:
+        return 1.0
+    
+    # Split URLs into components
+    parts1 = url1.split('/')
+    parts2 = url2.split('/')
+    
+    # Domain similarity (most important)
+    domain1 = parts1[0] if parts1 else ""
+    domain2 = parts2[0] if parts2 else ""
+    
+    if domain1 == domain2:
+        domain_score = 1.0
+    elif domain1 and domain2:
+        # Check for subdomain variations
+        if domain1.endswith(domain2) or domain2.endswith(domain1):
+            domain_score = 0.9
+        else:
+            # Calculate domain similarity using character overlap
+            domain_score = calculate_string_similarity(domain1, domain2)
+    else:
+        domain_score = 0.0
+    
+    # Path similarity
+    path1 = '/'.join(parts1[1:]) if len(parts1) > 1 else ""
+    path2 = '/'.join(parts2[1:]) if len(parts2) > 1 else ""
+    
+    if path1 == path2:
+        path_score = 1.0
+    elif path1 and path2:
+        # Check if one path contains the other
+        if path1 in path2 or path2 in path1:
+            path_score = 0.8
+        else:
+            # Calculate path similarity
+            path_score = calculate_string_similarity(path1, path2)
+    else:
+        path_score = 0.5 if not path1 and not path2 else 0.0
+    
+    # Weighted combination (domain is more important than path)
+    final_score = (domain_score * 0.7) + (path_score * 0.3)
+    
+    return final_score
+
+
+def calculate_string_similarity(str1: str, str2: str) -> float:
+    """
+    Calculate similarity between two strings using character overlap.
+    
+    Args:
+        str1: First string
+        str2: Second string
+        
+    Returns:
+        Similarity score between 0.0 and 1.0
+    """
+    if not str1 or not str2:
+        return 0.0
+    
+    if str1 == str2:
+        return 1.0
+    
+    # Convert to sets of characters for overlap calculation
+    chars1 = set(str1.lower())
+    chars2 = set(str2.lower())
+    
+    if not chars1 or not chars2:
+        return 0.0
+    
+    # Calculate Jaccard similarity
+    intersection = len(chars1.intersection(chars2))
+    union = len(chars1.union(chars2))
+    
+    if union == 0:
+        return 0.0
+    
+    return intersection / union
+
+
+def find_fuzzy_archive_matches(original_urls: List[str], all_archive_urls: List[str], 
+                              similarity_threshold: float = 0.7) -> Dict[str, str]:
+    """
+    Find fuzzy archive matches for a list of original URLs.
+    
+    Args:
+        original_urls: List of original URLs to find archives for
+        all_archive_urls: List of all available archive URLs
+        similarity_threshold: Minimum similarity score to consider a match
+        
+    Returns:
+        Dictionary mapping original URLs to their best fuzzy archive match
+    """
+    fuzzy_matches = {}
+    
+    for original_url in original_urls:
+        # Skip if this URL already has an exact archive match
+        if is_archive_url(original_url):
+            continue
+            
+        # Try to find a fuzzy match
+        fuzzy_archive = fuzzy_match_archive_url(original_url, all_archive_urls, similarity_threshold)
+        if fuzzy_archive:
+            fuzzy_matches[original_url] = fuzzy_archive
+    
+    return fuzzy_matches
 
 
 if __name__ == "__main__":

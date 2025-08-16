@@ -36,6 +36,7 @@ def print_report_summary(dead_links: Dict[str, List[Tuple[str, Optional[int]]]])
 
 def build_all_references_table(all_links: Dict[str, List[str]], 
                                archive_groups: Dict[str, Dict[str, List[str]]],
+                               fuzzy_archive_matches: Dict[str, Dict[str, str]] = None,
                                all_link_results: Dict[str, List[Tuple[str, str, Optional[int]]]] = None,
                                browser_validation_results: Dict[str, Dict[str, Tuple[str, str, Optional[int], Dict]]] = None,
                                generation_timestamp: Optional[str] = None) -> pl.DataFrame:
@@ -47,6 +48,7 @@ def build_all_references_table(all_links: Dict[str, List[str]],
 
     for article_title, links in all_links.items():
         article_archives = archive_groups.get(article_title, {})
+        article_fuzzy_matches = fuzzy_archive_matches.get(article_title, {}) if fuzzy_archive_matches else {}
         article_link_results = all_link_results.get(article_title, []) if all_link_results else []
         article_browser_results = browser_validation_results.get(article_title, {}) if browser_validation_results else {}
 
@@ -60,6 +62,10 @@ def build_all_references_table(all_links: Dict[str, List[str]],
             archive_urls = article_archives.get(original_url, [])
             # Use the first archive URL if available, otherwise None
             archive_url = archive_urls[0] if archive_urls else None
+            
+            # Check for fuzzy archive matches
+            fuzzy_archive_url = article_fuzzy_matches.get(original_url)
+            has_fuzzy_match_archive = bool(fuzzy_archive_url)
             
             # Determine error code and browser validation info for the original URL
             error_code: str
@@ -113,6 +119,8 @@ def build_all_references_table(all_links: Dict[str, List[str]],
                 'original_url': original_url,
                 'archive_url': archive_url,
                 'has_archive': bool(archive_url),
+                'fuzzy_match_archive_url': fuzzy_archive_url,
+                'has_fuzzy_match_archive': has_fuzzy_match_archive,
                 'error_code': error_code,
                 'timestamp': generation_timestamp,
                 'browser_validation_check': browser_validation_check,
@@ -124,6 +132,8 @@ def build_all_references_table(all_links: Dict[str, List[str]],
         'original_url': pl.Utf8,
         'archive_url': pl.Utf8,
         'has_archive': pl.Boolean,
+        'fuzzy_match_archive_url': pl.Utf8,
+        'has_fuzzy_match_archive': pl.Boolean,
         'error_code': pl.Utf8,
         'timestamp': pl.Utf8,
         'browser_validation_check': pl.Utf8,
@@ -135,6 +145,8 @@ def build_all_references_table(all_links: Dict[str, List[str]],
         'original_url',
         'archive_url',
         'has_archive',
+        'fuzzy_match_archive_url',
+        'has_fuzzy_match_archive',
         'error_code',
         'timestamp',
         'browser_validation_check',
@@ -144,6 +156,7 @@ def build_all_references_table(all_links: Dict[str, List[str]],
 
 def create_all_references_csv_report(all_links: Dict[str, List[str]], 
                                    archive_groups: Dict[str, Dict[str, List[str]]],
+                                   fuzzy_archive_matches: Dict[str, Dict[str, str]] = None,
                                    all_link_results: Dict[str, List[Tuple[str, str, Optional[int]]]] = None,
                                    browser_validation_results: Dict[str, Dict[str, Tuple[str, str, Optional[int], Dict]]] = None,
                                    output_dir: str = "output") -> str:
@@ -156,6 +169,7 @@ def create_all_references_csv_report(all_links: Dict[str, List[str]],
     df = build_all_references_table(
         all_links=all_links,
         archive_groups=archive_groups,
+        fuzzy_archive_matches=fuzzy_archive_matches,
         all_link_results=all_link_results,
         browser_validation_results=browser_validation_results,
         generation_timestamp=generation_timestamp,
