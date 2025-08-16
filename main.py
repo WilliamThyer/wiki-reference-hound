@@ -11,7 +11,7 @@ from typing import Dict, List, Tuple, Optional
 
 from fetch_top_articles import get_top_articles, get_all_time_top_articles
 from fetch_article_html import get_article_html
-from extract_references import extract_external_links, extract_external_links_from_references, filter_links_for_checking
+from extract_references import extract_external_links, extract_external_links_from_references, filter_links_for_checking, get_references_with_archives
 from check_links import check_all_links_with_archives, check_all_links_with_archives_parallel, print_link_summary
 from generate_report import create_all_references_csv_report, print_report_summary
 from utils import clean_article_title, format_duration
@@ -48,6 +48,8 @@ def main():
                        help='Maximum number of dead links to validate with browser (default: 50)')
     parser.add_argument('--references-only', action='store_true',
                        help='Only extract external links from the references section (more focused)')
+    parser.add_argument('--use-html-structure', action='store_true',
+                       help='Use HTML structure analysis to associate archives with their originals (more accurate)')
     
     args = parser.parse_args()
     
@@ -65,6 +67,8 @@ def main():
         print(f"   Max browser validation links: {args.max_browser_links}")
     if args.references_only:
         print(f"🎯 References-only mode enabled: Only extracting links from references section")
+    if args.use_html_structure:
+        print(f"🔗 HTML structure analysis enabled: Using HTML proximity to associate archives with originals")
     print()
     
     start_time = time.time()
@@ -105,19 +109,47 @@ def main():
             continue
             
         # Extract external links
-        if args.references_only:
+        if args.use_html_structure:
+            # Use the new HTML structure-based approach
+            references_with_archives = get_references_with_archives(html)
+            
+            # Convert to the format expected by the rest of the system
+            article_links = []
+            archive_groups = {}
+            
+            for ref in references_with_archives:
+                if ref['original_url']:
+                    article_links.append(ref['original_url'])
+                    if ref['archive_url']:
+                        if ref['original_url'] not in archive_groups:
+                            archive_groups[ref['original_url']] = []
+                        archive_groups[ref['original_url']].append(ref['archive_url'])
+            
+            print(f"   🔗 Using HTML structure analysis method")
+        elif args.references_only:
             article_links = extract_external_links_from_references(html)
             print(f"   🎯 Using references-only extraction method")
+            
+            # Filter links for checking (remove archives, group with originals)
+            links_to_check, archive_groups = filter_links_for_checking(article_links)
         else:
             article_links = extract_external_links(html)
             print(f"   🔍 Using comprehensive extraction method")
             
+            # Filter links for checking (remove archives, group with originals)
+            links_to_check, archive_groups = filter_links_for_checking(article_links)
+            
         if not article_links:
             print(f"   ℹ️  No external links found in '{clean_title}'")
             continue
-            
-        # Filter links for checking (remove archives, group with originals)
-        links_to_check, archive_groups = filter_links_for_checking(article_links)
+        
+        # For HTML structure method, we already have the archive groups
+        if not args.use_html_structure:
+            # Filter links for checking (remove archives, group with originals)
+            links_to_check, archive_groups = filter_links_for_checking(article_links)
+        else:
+            # For HTML structure method, links_to_check is all original links
+            links_to_check = article_links
             
         # Store all links and archive groups for this article
         all_links[clean_title] = article_links
