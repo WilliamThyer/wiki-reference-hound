@@ -52,20 +52,28 @@ def build_all_references_table(all_links: Dict[str, List[str]],
 
         link_results_lookup = {url: (status, code) for url, status, code in article_link_results}
 
-        for url in links:
-            is_archive = is_archive_url(url)
-            has_archive = bool(url in article_archives and article_archives[url])
-
+        # Get only original links (non-archive URLs)
+        original_links = [url for url in links if not is_archive_url(url)]
+        
+        for original_url in original_links:
+            # Check if this original link has any archive links
+            archive_urls = article_archives.get(original_url, [])
+            # Use the first archive URL if available, otherwise None
+            archive_url = archive_urls[0] if archive_urls else None
+            
+            # Determine error code and browser validation info for the original URL
             error_code: str
             browser_validation_check = "Not checked"
             browser_validation_check_detail = ""
 
-            if has_archive:
+            if archive_url:
+                # If there's an archive, mark as not needing checking
                 error_code = 'None'
                 browser_validation_check = 'Browser validation not performed.'
             else:
-                if url in link_results_lookup:
-                    status, status_code = link_results_lookup[url]
+                # No archive, so check the original link status
+                if original_url in link_results_lookup:
+                    status, status_code = link_results_lookup[original_url]
                     if status == 'dead':
                         error_code = status_code if status_code is not None else 'CONNECTION_ERROR'
                     elif status == 'blocked':
@@ -77,8 +85,9 @@ def build_all_references_table(all_links: Dict[str, List[str]],
                 else:
                     error_code = 'Not checked'
 
-                if url in article_browser_results:
-                    browser_status, browser_code, browser_info = article_browser_results[url][1:4]
+                # Get browser validation results if available
+                if original_url in article_browser_results:
+                    browser_status, browser_code, browser_info = article_browser_results[original_url][1:4]
                     browser_validation_check = browser_status
                     details = []
                     if browser_info:
@@ -86,14 +95,14 @@ def build_all_references_table(all_links: Dict[str, List[str]],
                             details.append(f"Error: {browser_info['error_indicator']}")
                         if browser_info.get('blocking_indicator'):
                             details.append(f"Blocked: {browser_info['blocking_indicator']}")
-                        if browser_info.get('final_url') and browser_info.get('final_url') != url:
+                        if browser_info.get('final_url') and browser_info.get('final_url') != original_url:
                             details.append(f"Redirected to: {browser_info['final_url']}")
                         if browser_info.get('title'):
                             details.append(f"Title: {browser_info['title']}")
                     browser_validation_check_detail = "; ".join(details) if details else ''
                 else:
-                    if url in link_results_lookup:
-                        status, _ = link_results_lookup[url]
+                    if original_url in link_results_lookup:
+                        status, _ = link_results_lookup[original_url]
                         if status in ('alive', 'blocked', 'dead'):
                             browser_validation_check = status
                         else:
@@ -101,9 +110,9 @@ def build_all_references_table(all_links: Dict[str, List[str]],
 
             records.append({
                 'article_title': article_title,
-                'url': url,
-                'is_archive': is_archive,
-                'has_archive': has_archive,
+                'original_url': original_url,
+                'archive_url': archive_url,
+                'has_archive': bool(archive_url),
                 'error_code': error_code,
                 'timestamp': generation_timestamp,
                 'browser_validation_check': browser_validation_check,
@@ -112,8 +121,8 @@ def build_all_references_table(all_links: Dict[str, List[str]],
 
     df = pl.DataFrame(records, schema={
         'article_title': pl.Utf8,
-        'url': pl.Utf8,
-        'is_archive': pl.Boolean,
+        'original_url': pl.Utf8,
+        'archive_url': pl.Utf8,
         'has_archive': pl.Boolean,
         'error_code': pl.Utf8,
         'timestamp': pl.Utf8,
@@ -123,8 +132,8 @@ def build_all_references_table(all_links: Dict[str, List[str]],
 
     return df.select([
         'article_title',
-        'url',
-        'is_archive',
+        'original_url',
+        'archive_url',
         'has_archive',
         'error_code',
         'timestamp',
