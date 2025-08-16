@@ -8,10 +8,42 @@ from extract_references import is_archive_url
 import socket
 import concurrent.futures
 from threading import Lock
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 # Suppress SSL/TLS warnings
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 warnings.filterwarnings('ignore', message='Unverified HTTPS request')
+
+# Global session with connection pooling
+_session = None
+_session_lock = Lock()
+
+def get_session():
+    """Get or create a global session with connection pooling."""
+    global _session
+    if _session is None:
+        with _session_lock:
+            if _session is None:  # Double-check pattern
+                _session = requests.Session()
+                
+                # Configure connection pooling
+                adapter = HTTPAdapter(
+                    pool_connections=50,
+                    pool_maxsize=200,
+                    max_retries=Retry(
+                        total=3,
+                        backoff_factor=0.1,
+                        status_forcelist=[429, 500, 502, 503, 504]
+                    )
+                )
+                _session.mount('https://', adapter)
+                _session.mount('http://', adapter)
+                
+                # Set default headers
+                _session.headers.update(DEFAULT_HEADERS)
+    
+    return _session
 
 # Constants
 DEFAULT_USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
@@ -71,7 +103,7 @@ def check_dns_resolution(url: str) -> bool:
 
 def check_link_status(url: str, timeout: float = 5.0) -> Tuple[str, str, Optional[int]]:
     """
-    Check if a URL is alive using HTTP requests.
+    Check if a URL is alive using HTTP requests with connection pooling.
     
     Returns:
         Tuple of (url, status, status_code)
@@ -85,9 +117,11 @@ def check_link_status(url: str, timeout: float = 5.0) -> Tuple[str, str, Optiona
     if not check_dns_resolution(url):
         return url, 'connection_error', None
     
+    session = get_session()
+    
     try:
         # Try HEAD request first
-        response = requests.head(url, timeout=timeout, headers=DEFAULT_HEADERS, allow_redirects=True)
+        response = session.head(url, timeout=timeout, allow_redirects=True)
         
         # Success case
         if response.status_code < 400:
@@ -104,7 +138,7 @@ def check_link_status(url: str, timeout: float = 5.0) -> Tuple[str, str, Optiona
         elif response.status_code in [301, 302, 303, 307, 308]:
             # Try GET request to follow redirects
             try:
-                get_response = requests.get(url, timeout=timeout, headers=DEFAULT_HEADERS, allow_redirects=True, stream=True)
+                get_response = session.get(url, timeout=timeout, allow_redirects=True, stream=True)
                 get_response.close()
                 if get_response.status_code < 400:
                     return url, 'alive', get_response.status_code
@@ -116,7 +150,7 @@ def check_link_status(url: str, timeout: float = 5.0) -> Tuple[str, str, Optiona
         # For 404 status codes, try GET request as some servers don't support HEAD
         elif response.status_code == 404:
             try:
-                get_response = requests.get(url, timeout=timeout, headers=DEFAULT_HEADERS, allow_redirects=True, stream=True)
+                get_response = session.get(url, timeout=timeout, allow_redirects=True, stream=True)
                 get_response.close()
                 if get_response.status_code < 400:
                     return url, 'alive', get_response.status_code
@@ -132,7 +166,7 @@ def check_link_status(url: str, timeout: float = 5.0) -> Tuple[str, str, Optiona
     except requests.RequestException:
         # If HEAD fails, try GET request
         try:
-            response = requests.get(url, timeout=timeout, headers=DEFAULT_HEADERS, allow_redirects=True, stream=True)
+            response = session.get(url, timeout=timeout, allow_redirects=True, stream=True)
             response.close()
             if response.status_code < 400:
                 return url, 'alive', response.status_code

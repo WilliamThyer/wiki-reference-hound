@@ -143,22 +143,52 @@ def build_all_references_table(all_links: Dict[str, List[str]],
 
 
 def create_all_references_csv_report(all_links: Dict[str, List[str]], 
-                                   archive_groups: Dict[str, Dict[str, List[str]]],
-                                   all_link_results: Dict[str, List[Tuple[str, str, Optional[int]]]] = None,
-                                   browser_validation_results: Dict[str, Dict[str, Tuple[str, str, Optional[int], Dict]]] = None,
-                                   output_dir: str = "output") -> str:
-    """Build the Polars table and persist it to CSV, returning the file path."""
+                                     archive_groups: Dict[str, Dict[str, List[str]]],
+                                     all_link_results: Dict[str, List[Tuple[str, str, Optional[int]]]] = None,
+                                     browser_validation_results: Dict[str, Dict[str, Tuple[str, str, Optional[int], Dict]]] = None,
+                                     output_dir: str = 'output',
+                                     batch_number: Optional[int] = None) -> str:
+    """
+    Create a comprehensive CSV report of all references with their status.
+    
+    Args:
+        all_links: Dictionary mapping article titles to lists of URLs
+        archive_groups: Dictionary mapping article titles to archive groups
+        all_link_results: Dictionary mapping article titles to link checking results
+        browser_validation_results: Dictionary mapping article titles to browser validation results
+        output_dir: Directory to save the report
+        batch_number: Optional batch number for batch processing
+        
+    Returns:
+        Filepath of the created CSV report
+    """
+    # Ensure output directory exists
     os.makedirs(output_dir, exist_ok=True)
-    generation_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"all_references_report_{generation_timestamp}.csv"
+    
+    # Generate timestamp and filename
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    
+    if batch_number is not None:
+        filename = f"all_references_batch_{batch_number:03d}_{timestamp}.csv"
+    else:
+        filename = f"all_references_{timestamp}.csv"
+    
     filepath = os.path.join(output_dir, filename)
-
+    
+    # Build the comprehensive table
     df = build_all_references_table(
-        all_links=all_links,
-        archive_groups=archive_groups,
-        all_link_results=all_link_results,
-        browser_validation_results=browser_validation_results,
-        generation_timestamp=generation_timestamp,
+        all_links, 
+        archive_groups, 
+        all_link_results, 
+        browser_validation_results, 
+        timestamp
     )
+    
+    # Save to CSV
     df.write_csv(filepath)
+    
+    print(f"📊 CSV report saved: {filepath}")
+    print(f"   📋 Total records: {len(df)}")
+    print(f"   📰 Articles: {len(all_links)}")
+    
     return filepath

@@ -7,10 +7,11 @@ Checks for dead external links in top Wikipedia articles.
 
 import argparse
 import time
+import os
 from typing import Dict, List, Tuple, Optional
 
 from fetch_top_articles import get_top_articles, get_all_time_top_articles
-from fetch_article_html import get_article_html
+from fetch_article_html import get_article_html, get_article_html_batch
 from extract_references import extract_external_links, extract_external_links_from_references, filter_links_for_checking, get_references_with_archives
 from check_links import check_all_links_with_archives, check_all_links_with_archives_parallel, print_link_summary
 from generate_report import create_all_references_csv_report, print_report_summary
@@ -23,52 +24,70 @@ def main():
     parser = argparse.ArgumentParser(description='Check for dead links in top Wikipedia articles')
     parser.add_argument('--limit', type=int, default=25, 
                        help='Number of articles to check (default: 25)')
-    parser.add_argument('--all-time', action='store_true',
-                       help='Fetch top articles of all time instead of yesterday\'s top articles')
+    parser.add_argument('--all-time', action='store_true', default=True,
+                       help='Fetch top articles of all time instead of yesterday\'s top articles (default: True)')
+    parser.add_argument('--daily', action='store_false', dest='all_time',
+                       help='Fetch yesterday\'s top articles instead of all-time (default: all-time)')
     parser.add_argument('--timeout', type=float, default=5.0,
                        help='Request timeout in seconds (default: 5.0)')
     parser.add_argument('--delay', type=float, default=0.1,
                        help='Delay between link checks in seconds (default: 0.1)')
     parser.add_argument('--output-dir', type=str, default='output',
                        help='Output directory for reports (default: output)')
-    parser.add_argument('--parallel', action='store_true',
-                       help='Enable parallel processing for faster link checking')
-    parser.add_argument('--max-workers', type=int, default=20,
-                       help='Maximum number of concurrent workers for parallel processing (default: 20)')
+    parser.add_argument('--parallel', action='store_true', default=True,
+                       help='Enable parallel processing for faster link checking (default: True)')
+    parser.add_argument('--no-parallel', action='store_false', dest='parallel',
+                       help='Disable parallel processing (default: parallel enabled)')
+    parser.add_argument('--max-workers', type=int, default=50,
+                       help='Maximum number of concurrent workers for parallel processing (default: 50)')
     parser.add_argument('--chunk-size', type=int, default=100,
                        help='Number of links to process in each batch for parallel processing (default: 100)')
     # Browser validation arguments
-    parser.add_argument('--browser-validation', action='store_true',
-                       help='Enable browser validation for false positive detection')
+    parser.add_argument('--browser-validation', action='store_true', default=True,
+                       help='Enable browser validation for false positive detection (default: True)')
+    parser.add_argument('--no-browser-validation', action='store_false', dest='browser_validation',
+                       help='Disable browser validation (default: browser validation enabled)')
     parser.add_argument('--browser-timeout', type=int, default=30,
                        help='Browser page load timeout in seconds (default: 30)')
-    parser.add_argument('--no-headless', action='store_true',
-                       help='Run browser in visible mode (default: headless)')
     parser.add_argument('--max-browser-links', type=int, default=50,
                        help='Maximum number of dead links to validate with browser (default: 50)')
-    parser.add_argument('--references-only', action='store_true',
-                       help='Only extract external links from the references section (more focused)')
-    parser.add_argument('--use-html-structure', action='store_true',
-                       help='Use HTML structure analysis to associate archives with their originals (more accurate)')
+    parser.add_argument('--no-headless', action='store_true',
+                       help='Run browser in visible mode (default: headless)')
+    parser.add_argument('--references-only', action='store_true', default=True,
+                       help='Only extract external links from the references section (default: True)')
+    parser.add_argument('--all-links', action='store_false', dest='references_only',
+                       help='Extract all external links, not just references (default: references only)')
+    parser.add_argument('--use-html-structure', action='store_true', default=True,
+                       help='Use HTML structure analysis to associate archives with their originals (default: True)')
+    parser.add_argument('--no-html-structure', action='store_false', dest='use_html_structure',
+                       help='Disable HTML structure analysis (default: HTML structure analysis enabled)')
     
     args = parser.parse_args()
     
     print("🔍 Wikipedia Dead Link Checker")
     print("=" * 40)
     if args.all_time:
-        print(f"📊 Checking top {args.limit} articles of all time")
+        print(f"📊 Checking top {args.limit} articles of all time (default)")
     else:
         print(f"📊 Checking top {args.limit} articles from yesterday")
     print(f"⏱️  Timeout: {args.timeout}s, Delay: {args.delay}s")
     if args.parallel:
-        print(f"🚀 Parallel processing enabled: {args.max_workers} workers, chunk size: {args.chunk_size}")
+        print(f"🚀 Parallel processing enabled: {args.max_workers} workers, chunk size: {args.chunk_size} (default)")
+    else:
+        print(f"🐌 Sequential processing enabled (parallel disabled)")
     if args.browser_validation:
-        print(f"🔍 Browser validation enabled: {args.browser_timeout}s timeout, headless: {not args.no_headless}")
+        print(f"🔍 Browser validation enabled: {args.browser_timeout}s timeout, headless: {not args.no_headless} (default)")
         print(f"   Max browser validation links: {args.max_browser_links}")
+    else:
+        print(f"🔍 Browser validation disabled")
     if args.references_only:
-        print(f"🎯 References-only mode enabled: Only extracting links from references section")
+        print(f"🎯 References-only mode enabled: Only extracting links from references section (default)")
+    else:
+        print(f"🔍 Comprehensive mode enabled: Extracting all external links")
     if args.use_html_structure:
-        print(f"🔗 HTML structure analysis enabled: Using HTML proximity to associate archives with originals")
+        print(f"🔗 HTML structure analysis enabled: Using HTML proximity to associate archives with originals (default)")
+    else:
+        print(f"🔗 Basic archive detection enabled")
     print()
     
     start_time = time.time()
@@ -87,162 +106,222 @@ def main():
     print(f"✅ Found {len(articles)} articles to check")
     print()
     
-    # Step 2: Process each article
+    # Step 2: Process articles in efficient batches
+    print("🔍 Processing articles in batches...")
+    
+    # Process articles in chunks to manage memory
+    chunk_size = 50  # Process 50 articles at a time
     dead_links = {}
-    all_links = {}  # Store all links found for each article
-    archive_groups_all = {}  # Store archive groups for all articles
-    all_link_results = {}  # Store complete link checking results for all articles
     total_links_checked = 0
     total_dead_links = 0
-    total_archived_links = 0  # Track total archived links
-    all_browser_validation_results = {}  # Store browser validation results for all articles
+    total_archived_links = 0
     
-    # Process each article and build in-memory data to create the all-references table
-    for i, title in enumerate(articles, 1):
-        clean_title = clean_article_title(title)
-        print(f"🔍 Processing ({i}/{len(articles)}): {clean_title}")
-            
-        # Fetch article HTML
-        html = get_article_html(title)
-        if not html:
-            print(f"   ⚠️  Could not fetch content for '{clean_title}'")
-            continue
-            
-        # Extract external links
-        if args.use_html_structure:
-            # Use the new HTML structure-based approach
-            references_with_archives = get_references_with_archives(html)
-            
-            # Convert to the format expected by the rest of the system
-            article_links = []
-            archive_groups = {}
-            
-            for ref in references_with_archives:
-                if ref['original_url']:
-                    article_links.append(ref['original_url'])
-                    if ref['archive_url']:
-                        if ref['original_url'] not in archive_groups:
-                            archive_groups[ref['original_url']] = []
-                        archive_groups[ref['original_url']].append(ref['archive_url'])
-            
-            print(f"   🔗 Using HTML structure analysis method")
-        elif args.references_only:
-            article_links = extract_external_links_from_references(html)
-            print(f"   🎯 Using references-only extraction method")
-            
-            # Filter links for checking (remove archives, group with originals)
-            links_to_check, archive_groups = filter_links_for_checking(article_links)
-        else:
-            article_links = extract_external_links(html)
-            print(f"   🔍 Using comprehensive extraction method")
-            
-            # Filter links for checking (remove archives, group with originals)
-            links_to_check, archive_groups = filter_links_for_checking(article_links)
-            
-        if not article_links:
-            print(f"   ℹ️  No external links found in '{clean_title}'")
+    # Track progress and memory usage
+    import gc
+    import psutil
+    import os
+    
+    def get_memory_usage():
+        """Get current memory usage in MB."""
+        try:
+            process = psutil.Process(os.getpid())
+            return process.memory_info().rss / 1024 / 1024
+        except:
+            return 0
+    
+    print(f"💾 Initial memory usage: {get_memory_usage():.1f} MB")
+    
+    for chunk_start in range(0, len(articles), chunk_size):
+        chunk_end = min(chunk_start + chunk_size, len(articles))
+        chunk_articles = articles[chunk_start:chunk_end]
+        
+        print(f"\n📦 Processing batch {chunk_start//chunk_size + 1}/{(len(articles)-1)//chunk_size + 1}: {len(chunk_articles)} articles")
+        print(f"   📊 Progress: {chunk_start}/{len(articles)} articles ({chunk_start/len(articles)*100:.1f}%)")
+        print(f"   💾 Memory before batch: {get_memory_usage():.1f} MB")
+        
+        # Fetch all articles in this chunk in a single API call
+        print(f"   📥 Fetching HTML content for {len(chunk_articles)} articles...")
+        html_batch = get_article_html_batch(chunk_articles, delay=args.delay)
+        
+        if not html_batch:
+            print(f"   ❌ Failed to fetch any articles in this batch")
             continue
         
-        # For HTML structure method, we already have the archive groups
-        if not args.use_html_structure:
-            # Filter links for checking (remove archives, group with originals)
-            links_to_check, archive_groups = filter_links_for_checking(article_links)
-        else:
-            # For HTML structure method, links_to_check is all original links
-            links_to_check = article_links
+        print(f"   ✅ Successfully fetched {len(html_batch)} articles")
+        
+        # Process each article in the chunk
+        chunk_dead_links = {}
+        chunk_all_links = {}
+        chunk_archive_groups = {}
+        chunk_link_results = {}
+        chunk_browser_results = {}
+        
+        for i, title in enumerate(chunk_articles, 1):
+            clean_title = clean_article_title(title)
+            print(f"   🔍 Processing ({i}/{len(chunk_articles)}): {clean_title}")
             
-        # Store all links and archive groups for this article
-        all_links[clean_title] = article_links
-        archive_groups_all[clean_title] = archive_groups
+            # Get HTML for this article from the batch
+            html = html_batch.get(title, "")
+            if not html:
+                print(f"      ⚠️  No HTML content for '{clean_title}'")
+                continue
             
-        # Count links that actually have archives
-        links_with_archives = sum(1 for archives in archive_groups.values() if archives)
-            
-        print(f"   📎 Found {len(article_links)} total links ({len(links_to_check)} to check, {links_with_archives} with archives)")
-            
-        total_links_checked += len(links_to_check)
-            
-        # Check link status
-        if args.parallel:
-            print(f"   🔗 Checking link status in parallel...")
-            results = check_all_links_with_archives_parallel(links_to_check, archive_groups, timeout=args.timeout, max_workers=args.max_workers)
-        else:
-            print(f"   🔗 Checking link status...")
-            results = check_all_links_with_archives(links_to_check, archive_groups, timeout=args.timeout, delay=args.delay)
-            
-        # Store complete link checking results for this article
-        all_link_results[clean_title] = results
-            
-        # Browser validation if enabled
-        if args.browser_validation:
-            from browser_validation import validate_dead_links_with_browser, create_browser_validation_report, print_browser_validation_summary
-            
-            # Get dead links for browser validation
-            dead_for_browser = [(url, status, code) for url, status, code in results if status == 'dead']
-            
-            if dead_for_browser:
-                print(f"   🔍 Browser validating {len(dead_for_browser)} dead links...")
-                browser_results = validate_dead_links_with_browser(
-                    dead_for_browser,
-                    headless=not args.no_headless,
-                    timeout=args.browser_timeout
-                )
+            # Extract external links
+            if args.use_html_structure:
+                # Use the new HTML structure-based approach
+                references_with_archives = get_references_with_archives(html)
                 
-                # Create browser validation report
-                browser_report = create_browser_validation_report(dead_for_browser, browser_results)
-                print_browser_validation_summary(browser_report)
+                # Convert to the format expected by the rest of the system
+                article_links = []
+                archive_groups = {}
                 
-                # Store browser report for later summary
-                if hasattr(args, 'browser_reports'):
-                    args.browser_reports.append(browser_report)
-                else:
-                    args.browser_reports = [browser_report]
+                for ref in references_with_archives:
+                    if ref['original_url']:
+                        article_links.append(ref['original_url'])
+                        if ref['archive_url']:
+                            if ref['original_url'] not in archive_groups:
+                                archive_groups[ref['original_url']] = []
+                            archive_groups[ref['original_url']].append(ref['archive_url'])
                 
-                # Store browser validation results for this article
-                article_browser_results = {}
-                for browser_result in browser_results:
-                    url, status, code, info = browser_result
-                    article_browser_results[url] = browser_result
-                all_browser_validation_results[clean_title] = article_browser_results
+                print(f"      🔗 Using HTML structure analysis method")
+            elif args.references_only:
+                article_links = extract_external_links_from_references(html)
+                print(f"      🎯 Using references-only extraction method")
+                
+                # Filter links for checking (remove archives, group with originals)
+                links_to_check, archive_groups = filter_links_for_checking(article_links)
             else:
-                all_browser_validation_results[clean_title] = {}
-        else:
-            all_browser_validation_results[clean_title] = {}
+                article_links = extract_external_links(html)
+                print(f"      🔍 Using comprehensive extraction method")
+                
+                # Filter links for checking (remove archives, group with originals)
+                links_to_check, archive_groups = filter_links_for_checking(article_links)
             
-        # Filter dead links (only truly dead, not archived or blocked)
-        dead = [(url, code) for url, status, code in results if status == 'dead']
-        blocked = [(url, status, code) for url, status, code in results if status == 'blocked']
-        archived = [(url, code) for url, status, code in results if status == 'archived']
+            if not article_links:
+                print(f"      ℹ️  No external links found in '{clean_title}'")
+                continue
+            
+            # For HTML structure method, we already have the archive groups
+            if not args.use_html_structure:
+                # Filter links for checking (remove archives, group with originals)
+                links_to_check, archive_groups = filter_links_for_checking(article_links)
+            else:
+                # For HTML structure method, links_to_check is all original links
+                links_to_check = article_links
+            
+            # Store all links and archive groups for this article
+            chunk_all_links[clean_title] = article_links
+            chunk_archive_groups[clean_title] = archive_groups
+            
+            # Count links that actually have archives
+            links_with_archives = sum(1 for archives in archive_groups.values() if archives)
+            
+            print(f"      📎 Found {len(article_links)} total links ({len(links_to_check)} to check, {links_with_archives} with archives)")
+            
+            total_links_checked += len(links_to_check)
+            
+            # Check link status
+            if args.parallel:
+                print(f"      🔗 Checking link status in parallel...")
+                results = check_all_links_with_archives_parallel(links_to_check, archive_groups, timeout=args.timeout, max_workers=args.max_workers)
+            else:
+                print(f"      🔗 Checking link status...")
+                results = check_all_links_with_archives(links_to_check, archive_groups, timeout=args.timeout, delay=args.delay)
+            
+            # Store complete link checking results for this article
+            chunk_link_results[clean_title] = results
+            
+            # Browser validation if enabled
+            if args.browser_validation:
+                from browser_validation import validate_dead_links_with_browser, create_browser_validation_report, print_browser_validation_summary
+                
+                # Get dead links for browser validation
+                dead_for_browser = [(url, status, code) for url, status, code in results if status == 'dead']
+                
+                if dead_for_browser:
+                    print(f"      🔍 Browser validating {len(dead_for_browser)} dead links...")
+                    browser_results = validate_dead_links_with_browser(
+                        dead_for_browser,
+                        headless=not args.no_headless,
+                        timeout=args.browser_timeout
+                    )
+                    
+                    # Store browser validation results for this article
+                    article_browser_results = {}
+                    for browser_result in browser_results:
+                        url, status, code, info = browser_result
+                        article_browser_results[url] = browser_result
+                    chunk_browser_results[clean_title] = article_browser_results
+                else:
+                    chunk_browser_results[clean_title] = {}
+            else:
+                chunk_browser_results[clean_title] = {}
+            
+            # Filter dead links (only truly dead, not archived or blocked)
+            dead = [(url, code) for url, status, code in results if status == 'dead']
+            blocked = [(url, status, code) for url, status, code in results if status == 'blocked']
+            archived = [(url, code) for url, status, code in results if status == 'archived']
+            
+            if dead:
+                chunk_dead_links[clean_title] = dead
+                total_dead_links += len(dead)
+                print(f"      ❌ Found {len(dead)} dead links")
+            else:
+                print(f"      ✅ All links are alive, archived, or blocked")
+            
+            if blocked:
+                print(f"      🚫 Found {len(blocked)} blocked links (likely bot protection)")
+            
+            if archived:
+                print(f"      📦 Found {len(archived)} archived links (skipped during checking)")
+                total_archived_links += len(archived)
         
-        if dead:
-            dead_links[clean_title] = dead
-            total_dead_links += len(dead)
-            print(f"   ❌ Found {len(dead)} dead links")
-        else:
-            print(f"   ✅ All links are alive, archived, or blocked")
+        # Generate report for this chunk immediately
+        print(f"   📋 Generating report for batch {chunk_start//chunk_size + 1}...")
         
-        if blocked:
-            print(f"   🚫 Found {len(blocked)} blocked links (likely bot protection)")
+        # Create the comprehensive CSV for this chunk
+        chunk_csv_filepath = create_all_references_csv_report(
+            chunk_all_links, 
+            chunk_archive_groups, 
+            chunk_link_results,
+            chunk_browser_results, 
+            args.output_dir,
+            batch_number=chunk_start//chunk_size + 1
+        )
         
-        if archived:
-            print(f"   📦 Found {len(archived)} archived links (skipped during checking)")
-            total_archived_links += len(archived)
+        print(f"   📄 Batch {chunk_start//chunk_size + 1} CSV report saved to: {chunk_csv_filepath}")
         
-        print()
+        # Merge chunk results into main results
+        dead_links.update(chunk_dead_links)
+        
+        # Clear chunk data to free memory
+        del chunk_all_links, chunk_archive_groups, chunk_link_results, chunk_browser_results
+        del html_batch  # Clear the HTML batch data too
+        
+        # Force garbage collection
+        gc.collect()
+        
+        print(f"   ✅ Batch {chunk_start//chunk_size + 1} completed. Memory cleared.")
+        print(f"   💾 Memory after cleanup: {get_memory_usage():.1f} MB")
+        
+        # Add delay between chunks to be respectful to the API
+        if chunk_end < len(articles):
+            print(f"   ⏳ Waiting {args.delay}s before next batch...")
+            time.sleep(args.delay)
     
-    # Step 3: Generate comprehensive reports
-    print("📋 Generating all-references report (primary artifact)...")
+    print(f"\n✅ All {len(articles)} articles processed in batches!")
+    print(f"💾 Final memory usage: {get_memory_usage():.1f} MB")
     
-    # Generate the new comprehensive CSV with ALL reference links
-    all_references_csv_filepath = create_all_references_csv_report(
-        all_links, 
-        archive_groups_all, 
-        all_link_results,  # Pass complete link results instead of just dead_links
-        all_browser_validation_results, 
-        args.output_dir
-    )
+    # Step 3: Generate final summary report (optional)
+    print("📋 Generating final summary report...")
     
-    print(f"📄 All References CSV report saved to: {all_references_csv_filepath}")
+    # Create a final summary CSV combining all batches if needed
+    if args.output_dir and os.path.exists(args.output_dir):
+        batch_files = [f for f in os.listdir(args.output_dir) if f.startswith('all_references_batch_') and f.endswith('.csv')]
+        if batch_files:
+            print(f"📄 Generated {len(batch_files)} batch reports in {args.output_dir}")
+            print(f"   Each batch contains up to {chunk_size} articles")
+            print(f"   Combine them manually or use a data analysis tool to merge")
     
     # Step 4: Print final summary
     end_time = time.time()

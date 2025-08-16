@@ -4,3 +4,4 @@ tqdm
 selenium
 webdriver-manager 
 polars
+psutil
