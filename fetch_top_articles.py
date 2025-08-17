@@ -9,66 +9,61 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 warnings.filterwarnings('ignore', message='Unverified HTTPS request')
 
 
-def get_top_articles(limit: int = 25) -> List[str]:
+def get_top_articles(limit: int = 25, verbose: bool = False) -> List[str]:
     """
-    Fetch the top most-viewed English Wikipedia articles from yesterday.
+    Fetch the top Wikipedia articles from yesterday.
     
     Args:
         limit: Number of articles to fetch (default: 25)
+        verbose: Enable verbose output
         
     Returns:
-        List of article titles (excluding Special: and Main Page)
+        List of article titles
     """
-    # Get yesterday's date
-    yesterday = datetime.now() - timedelta(days=1)
-    year = yesterday.year
-    month = yesterday.month
-    day = yesterday.day
-    
-    # Format month and day with leading zeros
-    month_str = f"{month:02d}"
-    day_str = f"{day:02d}"
-    
-    url = f"https://wikimedia.org/api/rest_v1/metrics/pageviews/top/en.wikipedia/all-access/{year}/{month_str}/{day_str}"
-    
-    headers = {
-        'User-Agent': 'Wikipedia-Dead-Link-Checker/1.0 (https://github.com/your-repo; your-email@example.com)'
-    }
-    
     try:
+        # Get yesterday's date
+        from datetime import datetime, timedelta
+        yesterday = datetime.now() - timedelta(days=1)
+        date_str = yesterday.strftime('%Y/%m/%d')
+        
+        url = f"https://wikimedia.org/api/rest_v1/metrics/pageviews/top/en.wikipedia/all-access/{date_str}"
+        
+        headers = {
+            'User-Agent': 'Wikipedia-Dead-Link-Checker/1.0 (https://github.com/your-repo; your-email@example.com)'
+        }
+        
         response = requests.get(url, headers=headers, verify=False, timeout=10)
         response.raise_for_status()
         
         data = response.json()
-        articles = []
         
-        # Extract article titles from the response
-        for item in data.get('items', []):
-            if 'articles' in item:
-                for article in item['articles']:
-                    title = article.get('article', '')
-                    
-                    # Skip Special: pages and Main Page
-                    if not title.startswith('Special:') and title != 'Main_Page':
-                        articles.append(title)
-                        
-                        # Stop when we reach the limit
-                        if len(articles) >= limit:
-                            break
-                if len(articles) >= limit:
-                    break
+        if 'items' in data and len(data['items']) > 0:
+            articles = data['items'][0].get('articles', [])
+            
+            # Extract titles, skipping special pages and main page
+            titles = []
+            for article in articles:
+                title = article.get('article', '')
+                if not title.startswith('Special:') and title != 'Main_Page':
+                    titles.append(title)
+                    if len(titles) >= limit:
+                        break
+            
+            return titles[:limit]
         
-        return articles[:limit]
+        return []
         
     except requests.RequestException as e:
-        print(f"Error fetching top articles: {e}")
+        if verbose:
+            print(f"Error fetching top articles: {e}")
         return []
     except (KeyError, ValueError) as e:
-        print(f"Error parsing response: {e}")
+        if verbose:
+            print(f"Error parsing response: {e}")
         return []
 
 
-def get_all_time_top_articles(limit: int = 25) -> List[str]:
+def get_all_time_top_articles(limit: int = 25, verbose: bool = False) -> List[str]:
     """
     Fetch articles that represent the most consistently popular English Wikipedia articles.
     Since the Wikimedia API doesn't provide true all-time data, this function aggregates
@@ -76,6 +71,7 @@ def get_all_time_top_articles(limit: int = 25) -> List[str]:
     
     Args:
         limit: Number of articles to fetch (default: 25)
+        verbose: Enable verbose output
         
     Returns:
         List of article titles representing consistently popular articles
@@ -96,7 +92,8 @@ def get_all_time_top_articles(limit: int = 25) -> List[str]:
     
     article_scores = {}  # Track articles and their cumulative scores
     
-    print(f"📊 Sampling data from {len(sample_dates)} representative dates...")
+    if verbose:
+        print(f"📊 Sampling data from {len(sample_dates)} representative dates...")
     
     for year, month, day in sample_dates:
         try:
@@ -142,13 +139,16 @@ def get_all_time_top_articles(limit: int = 25) -> List[str]:
                             'total_views': views
                         }
                 
-                print(f"   ✅ {year}-{month_str}-{day_str}: {len(articles)} articles")
+                if verbose:
+                    print(f"   ✅ {year}-{month_str}-{day_str}: {len(articles)} articles")
                 
             else:
-                print(f"   ⚠️  {year}-{month_str}-{day_str}: No data available")
+                if verbose:
+                    print(f"   ⚠️  {year}-{month_str}-{day_str}: No data available")
                 
         except Exception as e:
-            print(f"   ❌ {year}-{month_str}-{day_str}: Error - {str(e)}")
+            if verbose:
+                print(f"   ❌ {year}-{month_str}-{day_str}: Error - {str(e)}")
             continue
     
     # Sort articles by their cumulative score and appearance frequency
@@ -169,7 +169,8 @@ def get_all_time_top_articles(limit: int = 25) -> List[str]:
     # Extract titles up to the limit
     result = [article['title'] for article in sorted_articles[:limit]]
     
-    print(f"📈 Found {len(result)} consistently popular articles from {len(article_scores)} unique articles")
+    if verbose:
+        print(f"📈 Found {len(result)} consistently popular articles from {len(article_scores)} unique articles")
     
     return result
 
@@ -177,13 +178,13 @@ def get_all_time_top_articles(limit: int = 25) -> List[str]:
 if __name__ == "__main__":
     # Test both functions
     print("Testing daily top articles:")
-    daily_articles = get_top_articles(5)
+    daily_articles = get_top_articles(5, verbose=True)
     print(f"Top 5 articles from yesterday: {len(daily_articles)} found")
     for i, article in enumerate(daily_articles, 1):
         print(f"  {i}. {article}")
     
     print("\nTesting all-time top articles:")
-    all_time_articles = get_all_time_top_articles(5)
+    all_time_articles = get_all_time_top_articles(5, verbose=True)
     print(f"Top 5 articles of all time: {len(all_time_articles)} found")
     for i, article in enumerate(all_time_articles, 1):
         print(f"  {i}. {article}") 

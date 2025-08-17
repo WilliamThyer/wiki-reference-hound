@@ -5,33 +5,37 @@ from extract_references import is_archive_url
 import polars as pl
 
 
-def print_report_summary(dead_links: Dict[str, List[Tuple[str, Optional[int]]]]) -> None:
+def print_report_summary(dead_links: Dict[str, List[Tuple[str, str, Optional[int]]]], verbose: bool = False):
     """
     Print a summary of the dead links report to console.
     
     Args:
         dead_links: Dictionary mapping article titles to lists of (url, status_code) tuples
+        verbose: Enable verbose output
     """
     if not dead_links:
-        print("✅ No dead links found!")
+        if verbose:
+            print("✅ No dead links found!")
         return
     
     total_articles = len(dead_links)
     total_dead_links = sum(len(links) for links in dead_links.values())
     
-    print(f"\n📋 Report Summary:")
-    print(f"   Articles with dead links: {total_articles}")
-    print(f"   Total dead links: {total_dead_links}")
+    if verbose:
+        print(f"\n📋 Report Summary:")
+        print(f"   Articles with dead links: {total_articles}")
+        print(f"   Total dead links: {total_dead_links}")
     
     # Show top articles with most dead links
     sorted_articles = sorted(dead_links.items(), key=lambda x: len(x[1]), reverse=True)
     
-    print(f"\n🔝 Top articles with dead links:")
-    for i, (article_title, links) in enumerate(sorted_articles[:5], 1):
-        print(f"   {i}. {article_title} ({len(links)} dead links)")
-    
-    if len(sorted_articles) > 5:
-        print(f"   ... and {len(sorted_articles) - 5} more articles")
+    if verbose:
+        print(f"\n🔝 Top articles with dead links:")
+        for i, (article_title, links) in enumerate(sorted_articles[:5], 1):
+            print(f"   {i}. {article_title} ({len(links)} dead links)")
+        
+        if len(sorted_articles) > 5:
+            print(f"   ... and {len(sorted_articles) - 5} more articles")
 
 
 def build_all_references_table(all_links: Dict[str, List[str]], 
@@ -147,7 +151,8 @@ def create_all_references_csv_report(all_links: Dict[str, List[str]],
                                      all_link_results: Dict[str, List[Tuple[str, str, Optional[int]]]] = None,
                                      browser_validation_results: Dict[str, Dict[str, Tuple[str, str, Optional[int], Dict]]] = None,
                                      output_dir: str = 'output',
-                                     batch_number: Optional[int] = None) -> str:
+                                     batch_number: Optional[int] = None,
+                                     verbose: bool = False) -> str:
     """
     Create a comprehensive CSV report of all references with their status.
     
@@ -158,6 +163,7 @@ def create_all_references_csv_report(all_links: Dict[str, List[str]],
         browser_validation_results: Dictionary mapping article titles to browser validation results
         output_dir: Directory to save the report
         batch_number: Optional batch number for batch processing
+        verbose: Enable verbose output
         
     Returns:
         Filepath of the created CSV report
@@ -187,8 +193,9 @@ def create_all_references_csv_report(all_links: Dict[str, List[str]],
     # Save to CSV
     df.write_csv(filepath)
     
-    print(f"📊 CSV report saved: {filepath}")
-    print(f"   📋 Total records: {len(df)}")
-    print(f"   📰 Articles: {len(all_links)}")
+    if verbose:
+        print(f"📊 CSV report saved: {filepath}")
+        print(f"   📋 Total records: {len(df)}")
+        print(f"   📰 Articles: {len(all_links)}")
     
     return filepath

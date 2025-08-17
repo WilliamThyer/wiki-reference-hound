@@ -312,8 +312,11 @@ def create_browser_validation_report(dead_links: List[Tuple[str, str, Optional[i
     return report
 
 
-def print_browser_validation_summary(report: Dict):
+def print_browser_validation_summary(report: Dict, verbose: bool = False):
     """Print a summary of browser validation results."""
+    if not verbose:
+        return
+        
     print(f"\n🔍 Browser Validation Summary")
     print(f"=" * 40)
     print(f"Total links checked: {report['total_checked']}")

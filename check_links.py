@@ -293,10 +293,11 @@ def categorize_links(links_results: List[Tuple[str, str, Optional[int]]]) -> dic
     return categories
 
 
-def print_link_summary(links_results: List[Tuple[str, str, Optional[int]]]) -> None:
+def print_link_summary(links_results: List[Tuple[str, str, Optional[int]]], verbose: bool = False) -> None:
     """Print a summary of link checking results."""
     if not links_results:
-        print("No links to check.")
+        if verbose:
+            print("No links to check.")
         return
     
     categories = categorize_links(links_results)
@@ -308,23 +309,24 @@ def print_link_summary(links_results: List[Tuple[str, str, Optional[int]]]) -> N
     archived = len(categories['archived'])
     errors = len(categories['connection_error'])
     
-    print(f"\n📊 Link Check Summary:")
-    print(f"   Total links: {total}")
-    print(f"   ✅ Alive: {alive}")
-    print(f"   ❌ Dead: {dead}")
-    print(f"   🚫 Blocked (403): {blocked}")
-    print(f"   📦 Archived: {archived}")
-    print(f"   🔌 Connection errors: {errors}")
-    
-    if dead > 0:
-        print(f"\n❌ Dead links found:")
-        for url, status_code in categories['dead']:
-            print(f"   - {url} (Status: {status_code})")
-    
-    if blocked > 0:
-        print(f"\n🚫 Blocked links (likely bot protection):")
-        for url, status_code in categories['blocked']:
-            print(f"   - {url} (Status: {status_code})")
+    if verbose:
+        print(f"\n📊 Link Check Summary:")
+        print(f"   Total links: {total}")
+        print(f"   ✅ Alive: {alive}")
+        print(f"   ❌ Dead: {dead}")
+        print(f"   🚫 Blocked (403): {blocked}")
+        print(f"   📦 Archived: {archived}")
+        print(f"   🔌 Connection errors: {errors}")
+        
+        if dead > 0:
+            print(f"\n❌ Dead links found:")
+            for url, status_code in categories['dead']:
+                print(f"   - {url} (Status: {status_code})")
+        
+        if blocked > 0:
+            print(f"\n🚫 Blocked links (likely bot protection):")
+            for url, status_code in categories['blocked']:
+                print(f"   - {url} (Status: {status_code})")
 
 
 if __name__ == "__main__":

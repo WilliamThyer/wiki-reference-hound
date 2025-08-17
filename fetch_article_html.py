@@ -40,14 +40,15 @@ def get_session():
     
     return _session
 
-def get_article_html_batch(titles: List[str], delay: float = 0.1) -> dict:
+def get_article_html_batch(titles: List[str], delay: float = 0.1, verbose: bool = False) -> dict:
     """
-    Fetch HTML content for multiple Wikipedia articles in a single API call.
-    This is much more efficient than individual calls and respects API guidelines.
+    Fetch HTML content for multiple Wikipedia articles using individual API calls.
+    This approach is more reliable than trying to batch with pipe separators.
     
     Args:
         titles: List of Wikipedia article titles
         delay: Delay between API calls in seconds
+        verbose: Enable verbose output
         
     Returns:
         Dictionary mapping title to HTML content
@@ -58,19 +59,16 @@ def get_article_html_batch(titles: List[str], delay: float = 0.1) -> dict:
     session = get_session()
     results = {}
     
-    # Process titles in batches of 50 (Wikipedia API limit)
-    batch_size = 50
-    
-    for i in range(0, len(titles), batch_size):
-        batch_titles = titles[i:i + batch_size]
+    for i, title in enumerate(titles):
+        if verbose:
+            print(f"Fetching article {i+1}/{len(titles)}: {title}")
         
-        # MediaWiki API endpoint
+        # MediaWiki API endpoint for individual article
         url = "https://en.wikipedia.org/w/api.php"
         
-        # Use pipe separator to request multiple articles in one call
         params = {
             'action': 'parse',
-            'page': '|'.join(batch_titles),
+            'page': title,
             'prop': 'text',
             'formatversion': '2',
             'format': 'json'
@@ -87,64 +85,65 @@ def get_article_html_batch(titles: List[str], delay: float = 0.1) -> dict:
                 if data['error'].get('code') == 'ratelimited':
                     # Implement exponential backoff for rate limits
                     wait_time = delay * 2
-                    print(f"⚠️  Rate limited. Waiting {wait_time}s before retry...")
+                    if verbose:
+                        print(f"⚠️  Rate limited. Waiting {wait_time}s before retry...")
                     time.sleep(wait_time)
                     delay = min(delay * 2, 10.0)  # Exponential backoff, max 10s
                     continue
                 else:
-                    print(f"API Error: {data['error']['info']}")
+                    if verbose:
+                        print(f"API Error for '{title}': {data['error']['info']}")
                     continue
             
-            # Extract HTML content for each article
-            if 'parse' in data:
-                # Handle single article response
-                if isinstance(data['parse'], dict):
-                    title = data['parse'].get('title', '')
-                    if 'text' in data['parse']:
-                        results[title] = data['parse']['text']
-                # Handle multiple articles response
-                elif isinstance(data['parse'], list):
-                    for article in data['parse']:
-                        title = article.get('title', '')
-                        if 'text' in article:
-                            results[title] = article['text']
+            # Extract HTML content for the article
+            if 'parse' in data and 'text' in data['parse']:
+                results[title] = data['parse']['text']
+                if verbose:
+                    print(f"✅ Successfully fetched '{title}' ({len(data['parse']['text'])} characters)")
+            else:
+                if verbose:
+                    print(f"⚠️  No content found for '{title}'")
             
-            # Add delay between batches to be respectful
-            if i + batch_size < len(titles):
+            # Add delay between requests to be respectful
+            if i < len(titles) - 1:
                 time.sleep(delay)
                 
         except requests.RequestException as e:
-            print(f"Error fetching batch of articles: {e}")
-            # Continue with next batch instead of failing completely
+            if verbose:
+                print(f"Error fetching article '{title}': {e}")
+            # Continue with next article instead of failing completely
             continue
         except (KeyError, ValueError) as e:
-            print(f"Error parsing response: {e}")
+            if verbose:
+                print(f"Error parsing response for '{title}': {e}")
             continue
     
     return results
 
-def get_article_html(title: str) -> str:
+def get_article_html(title: str, verbose: bool = False) -> str:
     """
     Fetch the HTML content of a single Wikipedia article.
     For multiple articles, use get_article_html_batch() instead.
     
     Args:
         title: The title of the Wikipedia article
+        verbose: Enable verbose output
         
     Returns:
         Raw HTML content of the article
     """
     # Use the batch function with a single title for backward compatibility
-    results = get_article_html_batch([title])
+    results = get_article_html_batch([title], verbose=verbose)
     return results.get(title, "")
 
 
-def get_article_text(title: str) -> Optional[str]:
+def get_article_text(title: str, verbose: bool = False) -> Optional[str]:
     """
     Fetch the plain text content of a Wikipedia article (alternative method).
     
     Args:
         title: The title of the Wikipedia article
+        verbose: Enable verbose output
         
     Returns:
         Plain text content of the article
@@ -167,7 +166,8 @@ def get_article_text(title: str) -> Optional[str]:
         data = response.json()
         
         if 'error' in data:
-            print(f"API Error for '{title}': {data['error']['info']}")
+            if verbose:
+                print(f"API Error for '{title}': {data['error']['info']}")
             return None
         
         pages = data['query']['pages']
@@ -176,21 +176,24 @@ def get_article_text(title: str) -> Optional[str]:
         if page_id != '-1' and 'extract' in pages[page_id]:
             return pages[page_id]['extract']
         else:
-            print(f"Article '{title}' not found or has no content")
+            if verbose:
+                print(f"Article '{title}' not found or has no content")
             return None
             
     except requests.RequestException as e:
-        print(f"Error fetching article '{title}': {e}")
+        if verbose:
+            print(f"Error fetching article '{title}': {e}")
         return None
     except (KeyError, ValueError) as e:
-        print(f"Error parsing response for '{title}': {e}")
+        if verbose:
+            print(f"Error parsing response for '{title}': {e}")
         return None
 
 
 if __name__ == "__main__":
     # Test the function
     test_title = "Python_(programming_language)"
-    html_content = get_article_html(test_title)
+    html_content = get_article_html(test_title, verbose=True)
     print(f"HTML content length for '{test_title}': {len(html_content)} characters")
     
     if html_content:
