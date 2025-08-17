@@ -1,7 +1,7 @@
 import os
 from typing import Dict, List, Tuple, Optional
 from datetime import datetime
-from extract_references import is_archive_url
+from .extract_references import is_archive_url
 import polars as pl
 
 

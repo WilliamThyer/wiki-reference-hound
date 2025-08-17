@@ -4,7 +4,7 @@ import warnings
 from typing import List, Tuple, Optional, Dict
 from tqdm import tqdm
 import time
-from extract_references import is_archive_url
+from .extract_references import is_archive_url
 import socket
 import concurrent.futures
 from threading import Lock

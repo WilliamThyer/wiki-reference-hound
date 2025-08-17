@@ -1,7 +1,7 @@
 from bs4 import BeautifulSoup
 from typing import List, Set, Dict, Tuple, Optional
 import re
-from fetch_article_html import get_article_html
+from .fetch_article_html import get_article_html
 
 
 def normalize_url_for_comparison(url: str) -> str:

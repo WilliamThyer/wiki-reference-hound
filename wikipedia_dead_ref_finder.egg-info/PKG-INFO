@@ -1,3 +1,42 @@
+Metadata-Version: 2.4
+Name: wikipedia-dead-ref-finder
+Version: 1.0.0
+Summary: A tool to check for dead external links in top Wikipedia articles
+Home-page: https://github.com/your-repo/wikipedia-dead-ref-finder
+Author: Wikipedia Dead Link Finder Contributors
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: Science/Research
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Topic :: Internet :: WWW/HTTP :: Browsers
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Topic :: Text Processing :: Markup :: HTML
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+Requires-Dist: requests>=2.25.0
+Requires-Dist: beautifulsoup4>=4.9.0
+Requires-Dist: tqdm>=4.60.0
+Requires-Dist: selenium>=4.0.0
+Requires-Dist: polars>=0.20.0
+Requires-Dist: psutil>=5.8.0
+Provides-Extra: dev
+Requires-Dist: pytest>=6.0.0; extra == "dev"
+Requires-Dist: black>=21.0.0; extra == "dev"
+Requires-Dist: flake8>=3.8.0; extra == "dev"
+Dynamic: author
+Dynamic: classifier
+Dynamic: description
+Dynamic: description-content-type
+Dynamic: home-page
+Dynamic: requires-python
+
 # Wikipedia Dead Link Finder
 
 A Python tool that automatically checks for dead external links in Wikipedia articles. Can be used both as a command-line tool and as a Python library.

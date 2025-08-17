@@ -12,6 +12,12 @@ dependencies = [
     "psutil>=5.8.0",
 ]
 
+# Declare these fields as dynamic since they're defined in setup.py
+dynamic = ["readme", "authors", "classifiers"]
+
+[project.scripts]
+wikipedia-dead-ref-finder = "wikipedia_dead_ref_finder.cli:main"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=6.0.0",
@@ -20,6 +26,7 @@ dev = [
 ]
 
 [tool.uv]
+package = true
 dev-dependencies = [
     "pytest>=6.0.0",
     "black>=21.0.0",

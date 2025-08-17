@@ -1,0 +1,2 @@
+[console_scripts]
+wikipedia-dead-ref-finder = wikipedia_dead_ref_finder.cli:main
