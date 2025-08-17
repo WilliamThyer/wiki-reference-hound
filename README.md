@@ -18,12 +18,21 @@ A Python tool that automatically checks for dead external links in the top 25 mo
 ### 1. Install Dependencies
 
 ```bash
-pip install -r requirements.txt
+# Using UV (recommended)
+./setup_uv.sh
+
+# Or manually with UV
+uv sync
 ```
 
 ### 2. Run the Tool
 
 ```bash
+# Using UV
+uv run main.py
+
+# Or activate the virtual environment first
+uv shell
 python main.py
 ```
 
@@ -62,19 +71,19 @@ Options:
 
 ```bash
 # Check only top 10 articles
-python main.py --limit 10
+uv run main.py --limit 10
 
 # Use longer timeout for slow servers
-python main.py --timeout 10.0
+uv run main.py --timeout 10.0
 
 # Enable parallel processing for faster checking
-python main.py --parallel --max-workers 30
+uv run main.py --parallel --max-workers 30
 
 # Enable browser validation for false positive detection
-python main.py --browser-validation --browser-timeout 20
+uv run main.py --browser-validation --browser-timeout 20
 
 # Use references-only mode for more focused link extraction
-python main.py --references-only
+uv run main.py --references-only
 ```
 
 ## Link Extraction Methods
@@ -136,7 +145,7 @@ wikipedia-dead-ref-finder/
 ├── generate_report.py     # Builds the ALL references Polars table and writes CSV
 ├── browser_validation.py  # Browser automation for false positive detection
 ├── utils.py              # Utility functions
-├── requirements.txt      # Python dependencies
+├── pyproject.toml       # UV project configuration
 ├── README.md            # This file
 └── output/              # Generated reports (created automatically)
     └── all_references_report_YYYYMMDD_HHMMSS.csv
