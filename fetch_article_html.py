@@ -118,59 +118,6 @@ def get_article_html(title: str, verbose: bool = False) -> str:
     return results.get(title, "")
 
 
-def get_article_text(title: str, verbose: bool = False) -> Optional[str]:
-    """
-    Fetch the plain text content of a Wikipedia article (alternative method).
-    
-    Args:
-        title: The title of the Wikipedia article
-        verbose: Enable verbose output
-        
-    Returns:
-        Plain text content of the article
-    """
-    url = "https://en.wikipedia.org/w/api.php"
-    
-    params = {
-        'action': 'query',
-        'titles': title,
-        'prop': 'extracts',
-        'exintro': '',
-        'explaintext': '',
-        'format': 'json'
-    }
-    
-    try:
-        response = requests.get(url, params=params, timeout=15)
-        response.raise_for_status()
-        
-        data = response.json()
-        
-        if 'error' in data:
-            if verbose:
-                print(f"API Error for '{title}': {data['error']['info']}")
-            return None
-        
-        pages = data['query']['pages']
-        page_id = list(pages.keys())[0]
-        
-        if page_id != '-1' and 'extract' in pages[page_id]:
-            return pages[page_id]['extract']
-        else:
-            if verbose:
-                print(f"Article '{title}' not found or has no content")
-            return None
-            
-    except requests.RequestException as e:
-        if verbose:
-            print(f"Error fetching article '{title}': {e}")
-        return None
-    except (KeyError, ValueError) as e:
-        if verbose:
-            print(f"Error parsing response for '{title}': {e}")
-        return None
-
-
 if __name__ == "__main__":
     # Test the function
     test_title = "Python_(programming_language)"

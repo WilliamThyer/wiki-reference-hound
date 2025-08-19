@@ -38,14 +38,44 @@ def print_report_summary(dead_links: Dict[str, List[Tuple[str, str, Optional[int
             print(f"   ... and {len(sorted_articles) - 5} more articles")
 
 
-def build_all_references_table(all_links: Dict[str, List[str]], 
-                               archive_groups: Dict[str, Dict[str, List[str]]],
-                               all_link_results: Dict[str, List[Tuple[str, str, Optional[int]]]] = None,
-                               browser_validation_results: Dict[str, Dict[str, Tuple[str, str, Optional[int], Dict]]] = None,
-                               generation_timestamp: Optional[str] = None) -> pl.DataFrame:
-    """Construct the ALL references Polars DataFrame that serves as the project's primary output."""
-    if generation_timestamp is None:
-        generation_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+def create_all_references_csv_report(all_links: Dict[str, List[str]], 
+                                     archive_groups: Dict[str, Dict[str, List[str]]],
+                                     all_link_results: Dict[str, List[Tuple[str, str, Optional[int]]]] = None,
+                                     browser_validation_results: Dict[str, Dict[str, Tuple[str, str, Optional[int], Dict]]] = None,
+                                     output_dir: str = 'output',
+                                     batch_number: Optional[int] = None,
+                                     verbose: bool = False) -> str:
+    """
+    Create a comprehensive CSV report of all references with their status.
+    
+    Args:
+        all_links: Dictionary mapping article titles to lists of URLs
+        archive_groups: Dictionary mapping article titles to archive groups
+        all_link_results: Dictionary mapping article titles to link checking results
+        browser_validation_results: Dictionary mapping article titles to browser validation results
+        output_dir: Directory to save the report
+        batch_number: Optional batch number for batch processing
+        verbose: Enable verbose output
+        
+    Returns:
+        Filepath of the created CSV report
+    """
+    # Ensure output directory exists
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Generate timestamp and filename
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    
+    if batch_number is not None:
+        filename = f"all_references_batch_{batch_number:03d}_{timestamp}.csv"
+    else:
+        filename = f"all_references_{timestamp}.csv"
+    
+    filepath = os.path.join(output_dir, filename)
+    
+    # Build the comprehensive table
+    if timestamp is None:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     records: List[dict] = []
 
@@ -118,7 +148,7 @@ def build_all_references_table(all_links: Dict[str, List[str]],
                 'archive_url': archive_url,
                 'has_archive': bool(archive_url),
                 'error_code': error_code,
-                'timestamp': generation_timestamp,
+                'timestamp': timestamp,
                 'browser_validation_check': browser_validation_check,
                 'browser_validation_check_detail': browser_validation_check_detail
             })
@@ -134,7 +164,7 @@ def build_all_references_table(all_links: Dict[str, List[str]],
         'browser_validation_check_detail': pl.Utf8,
     })
 
-    return df.select([
+    df = df.select([
         'article_title',
         'original_url',
         'archive_url',
@@ -144,51 +174,6 @@ def build_all_references_table(all_links: Dict[str, List[str]],
         'browser_validation_check',
         'browser_validation_check_detail'
     ])
-
-
-def create_all_references_csv_report(all_links: Dict[str, List[str]], 
-                                     archive_groups: Dict[str, Dict[str, List[str]]],
-                                     all_link_results: Dict[str, List[Tuple[str, str, Optional[int]]]] = None,
-                                     browser_validation_results: Dict[str, Dict[str, Tuple[str, str, Optional[int], Dict]]] = None,
-                                     output_dir: str = 'output',
-                                     batch_number: Optional[int] = None,
-                                     verbose: bool = False) -> str:
-    """
-    Create a comprehensive CSV report of all references with their status.
-    
-    Args:
-        all_links: Dictionary mapping article titles to lists of URLs
-        archive_groups: Dictionary mapping article titles to archive groups
-        all_link_results: Dictionary mapping article titles to link checking results
-        browser_validation_results: Dictionary mapping article titles to browser validation results
-        output_dir: Directory to save the report
-        batch_number: Optional batch number for batch processing
-        verbose: Enable verbose output
-        
-    Returns:
-        Filepath of the created CSV report
-    """
-    # Ensure output directory exists
-    os.makedirs(output_dir, exist_ok=True)
-    
-    # Generate timestamp and filename
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    
-    if batch_number is not None:
-        filename = f"all_references_batch_{batch_number:03d}_{timestamp}.csv"
-    else:
-        filename = f"all_references_{timestamp}.csv"
-    
-    filepath = os.path.join(output_dir, filename)
-    
-    # Build the comprehensive table
-    df = build_all_references_table(
-        all_links, 
-        archive_groups, 
-        all_link_results, 
-        browser_validation_results, 
-        timestamp
-    )
     
     # Save to CSV
     df.write_csv(filepath)

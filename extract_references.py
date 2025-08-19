@@ -124,45 +124,6 @@ def is_url_equivalent(url1: str, url2: str) -> bool:
     return False
 
 
-def find_best_original_url(urls: List[str], preferred_protocol: str = 'https') -> str:
-    """
-    Find the best original URL from a list of URLs, preferring HTTPS over HTTP.
-    
-    Args:
-        urls: List of URLs to choose from
-        preferred_protocol: Preferred protocol ('https' or 'http')
-        
-    Returns:
-        Best URL to use as the original
-    """
-    if not urls:
-        return ""
-    
-    # Filter out archive URLs
-    original_urls = [url for url in urls if not is_archive_url(url)]
-    
-    if not original_urls:
-        return ""
-    
-    # If only one original URL, return it
-    if len(original_urls) == 1:
-        return original_urls[0]
-    
-    # Prefer HTTPS over HTTP
-    https_urls = [url for url in original_urls if url.startswith('https://')]
-    http_urls = [url for url in original_urls if url.startswith('http://')]
-    
-    if preferred_protocol == 'https' and https_urls:
-        return https_urls[0]
-    elif http_urls:
-        return http_urls[0]
-    elif https_urls:
-        return https_urls[0]
-    
-    # Fallback to first URL
-    return original_urls[0]
-
-
 def is_archive_url(url: str) -> bool:
     """
     Check if a URL is an archive link (web.archive.org, archive.today, etc.).
@@ -284,54 +245,6 @@ def is_valid_archive_match(original_url: str, archive_url: str) -> bool:
     return is_url_equivalent(original_url, extracted_original)
 
 
-def group_links_with_archives(links: List[str]) -> Dict[str, List[str]]:
-    """
-    Group links by their normalized URL, identifying archive versions.
-    
-    Args:
-        links: List of URLs
-        
-    Returns:
-        Dictionary mapping normalized original URLs to list of archive URLs
-    """
-    link_groups = {}
-    
-    for link in links:
-        if is_archive_url(link):
-            original = extract_original_url_from_archive(link)
-            if original:
-                # Find the best matching original link from our list
-                best_original = None
-                for orig_link in links:
-                    if not is_archive_url(orig_link) and is_url_equivalent(orig_link, original):
-                        best_original = orig_link
-                        break
-                
-                if best_original:
-                    # Use the actual original URL as the key
-                    if best_original not in link_groups:
-                        link_groups[best_original] = []
-                    link_groups[best_original].append(link)
-        else:
-            # This is an original link - ensure it's in the groups
-            if link not in link_groups:
-                link_groups[link] = []
-    
-    # Validate archive matches and clean up any invalid ones
-    validated_groups = {}
-    for original_url, archives in link_groups.items():
-        # Validate each archive against the original URL
-        valid_archives = []
-        for archive in archives:
-            if is_valid_archive_match(original_url, archive):
-                valid_archives.append(archive)
-        
-        if valid_archives:
-            validated_groups[original_url] = valid_archives
-    
-    return validated_groups
-
-
 def filter_links_for_checking(links: List[str]) -> Tuple[List[str], Dict[str, List[str]]]:
     """
     Filter links for checking, separating original links with and without archives.
@@ -378,60 +291,6 @@ def filter_links_for_checking(links: List[str]) -> Tuple[List[str], Dict[str, Li
             links_to_check.append(link)
     
     return links_to_check, links_with_archives
-
-
-def get_wikipedia_references(title: str) -> List[str]:
-    """
-    Fetch the references (citations) from a Wikipedia article.
-
-    Args:
-        title: The title of the Wikipedia article
-
-    Returns:
-        A list of HTML strings, each representing one reference
-    """
-    html = get_article_html(title)
-    if not html:
-        return []
-
-    soup = BeautifulSoup(html, 'html.parser')
-
-    # Find all reference list containers
-    references_ol = soup.find_all("ol", class_="references")
-
-    all_refs = []
-    for ol in references_ol:
-        for li in ol.find_all("li", recursive=False):
-            all_refs.append(str(li))
-
-    return all_refs
-
-
-def get_wikipedia_references_from_html(html: str) -> List[str]:
-    """
-    Extract the references (citations) from Wikipedia article HTML content.
-    This function specifically targets only the references section.
-
-    Args:
-        html: Raw HTML content of the Wikipedia article
-
-    Returns:
-        A list of HTML strings, each representing one reference
-    """
-    if not html:
-        return []
-
-    soup = BeautifulSoup(html, 'html.parser')
-    all_refs = []
-
-    # Find all reference list containers
-    references_ol = soup.find_all("ol", class_="references")
-
-    for ol in references_ol:
-        for li in ol.find_all("li", recursive=False):
-            all_refs.append(str(li))
-
-    return all_refs
 
 
 def extract_external_links(html: str) -> List[str]:
@@ -602,31 +461,6 @@ def is_likely_reference_link(link_element) -> bool:
             return False
     
     return True
-
-
-def extract_all_links(html: str) -> List[str]:
-    """
-    Extract ALL external links from the HTML (for debugging purposes).
-    
-    Args:
-        html: Raw HTML content
-        
-    Returns:
-        List of all external URLs found
-    """
-    if not html:
-        return []
-    
-    soup = BeautifulSoup(html, 'html.parser')
-    external_links = set()
-    
-    all_links = soup.find_all('a', href=True)
-    for link in all_links:
-        href = link['href']
-        if is_external_url(href):
-            external_links.add(href)
-    
-    return list(external_links)
 
 
 def extract_references_with_archives(html: str) -> List[Dict[str, str]]:

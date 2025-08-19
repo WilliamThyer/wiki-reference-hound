@@ -238,38 +238,41 @@ def check_all_links_with_archives_parallel(links: List[str], archive_groups: Dic
     if not links_to_check:
         return results
     
-    def process_chunk(chunk_links: List[str]) -> List[Tuple[str, str, Optional[int]]]:
-        chunk_results = []
-        
-        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-            future_to_url = {
-                executor.submit(check_link_status, url, timeout): url 
-                for url in chunk_links
-            }
-            
-            for future in concurrent.futures.as_completed(future_to_url):
-                url = future_to_url[future]
-                try:
-                    result = future.result()
-                    chunk_results.append(result)
-                except Exception:
-                    chunk_results.append((url, 'connection_error', None))
-        
-        return chunk_results
-    
     # Process links in chunks
     with tqdm(total=len(links_to_check), desc=f"Checking links ({max_workers} workers)", unit="link") as pbar:
         for i in range(0, len(links_to_check), chunk_size):
             chunk = links_to_check[i:i + chunk_size]
-            chunk_results = process_chunk(chunk)
+            
+            # Process this chunk
+            chunk_results = []
+            with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+                future_to_url = {
+                    executor.submit(check_link_status, url, timeout): url 
+                    for url in chunk
+                }
+                
+                for future in concurrent.futures.as_completed(future_to_url):
+                    url = future_to_url[future]
+                    try:
+                        result = future.result()
+                        chunk_results.append(result)
+                    except Exception:
+                        chunk_results.append((url, 'connection_error', None))
+            
             results.extend(chunk_results)
             pbar.update(len(chunk))
     
     return results
 
 
-def categorize_links(links_results: List[Tuple[str, str, Optional[int]]]) -> dict:
-    """Categorize links by their status."""
+def print_link_summary(links_results: List[Tuple[str, str, Optional[int]]], verbose: bool = False) -> None:
+    """Print a summary of link checking results."""
+    if not links_results:
+        if verbose:
+            print("No links to check.")
+        return
+    
+    # Categorize links by their status
     categories = {
         'alive': [],
         'dead': [],
@@ -289,18 +292,6 @@ def categorize_links(links_results: List[Tuple[str, str, Optional[int]]]) -> dic
             categories['archived'].append((url, status_code))
         elif status == 'connection_error':
             categories['connection_error'].append((url, None))
-    
-    return categories
-
-
-def print_link_summary(links_results: List[Tuple[str, str, Optional[int]]], verbose: bool = False) -> None:
-    """Print a summary of link checking results."""
-    if not links_results:
-        if verbose:
-            print("No links to check.")
-        return
-    
-    categories = categorize_links(links_results)
     
     total = len(links_results)
     alive = len(categories['alive'])

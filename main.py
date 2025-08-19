@@ -256,7 +256,7 @@ def main():
             
             # Browser validation if enabled
             if args.browser_validation:
-                from browser_validation import validate_dead_links_with_browser, create_browser_validation_report, print_browser_validation_summary
+                from browser_validation import validate_dead_links_with_browser
                 
                 # Get dead links for browser validation
                 dead_for_browser = [(url, status, code) for url, status, code in results if status == 'dead']
@@ -415,8 +415,6 @@ def main():
                 print(f"🎉 Browser validation helped detect {total_false_positives} false positives!")
                 print(f"💡 Detailed results are captured in the all-references CSV report")
         
-        # We no longer generate extra artifacts; all information is in the all-references CSV
-    
     if args.verbose:
         print("\n✅ Done!")
 

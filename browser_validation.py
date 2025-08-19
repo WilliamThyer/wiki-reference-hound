@@ -27,16 +27,6 @@ except ImportError:
     logger.warning("Selenium not available. Install with: pip install selenium")
 
 
-def set_logging_level(verbose: bool = False):
-    """Set the logging level based on verbose flag."""
-    if verbose:
-        logging.getLogger().setLevel(logging.INFO)
-        logger.setLevel(logging.INFO)
-    else:
-        logging.getLogger().setLevel(logging.WARNING)
-        logger.setLevel(logging.WARNING)
-
-
 class BrowserValidator:
     """Browser-based validator for detecting false positives in dead link detection."""
     
@@ -51,7 +41,12 @@ class BrowserValidator:
         self.driver = None
         
         # Set logging level based on verbose flag
-        set_logging_level(verbose)
+        if verbose:
+            logging.getLogger().setLevel(logging.INFO)
+            logger.setLevel(logging.INFO)
+        else:
+            logging.getLogger().setLevel(logging.WARNING)
+            logger.setLevel(logging.WARNING)
         
     def _create_driver(self) -> 'webdriver.Chrome':
         """Create and configure Chrome WebDriver."""
@@ -270,89 +265,6 @@ def validate_dead_links_with_browser(dead_links: List[Tuple[str, str, Optional[i
     
     with BrowserValidator(headless=headless, timeout=timeout, verbose=verbose) as validator:
         return validator.validate_multiple_urls(urls)
-
-
-def create_browser_validation_report(dead_links: List[Tuple[str, str, Optional[int]]],
-                                   browser_results: List[Tuple[str, str, Optional[int], Dict]]) -> Dict:
-    """Create a report of browser validation results."""
-    report = {
-        'total_checked': len(dead_links),
-        'confirmed_dead': 0,
-        'false_positives': 0,
-        'blocked': 0,
-        'timeout': 0,
-        'error': 0,
-        'false_positive_urls': [],
-        'confirmed_dead_urls': [],
-        'blocked_urls': []
-    }
-    
-    for i, item in enumerate(dead_links):
-        if i < len(browser_results):
-            browser_result = browser_results[i]
-            browser_url, browser_status, browser_code, browser_info = browser_result
-            
-            # Extract URL and initial info
-            if len(item) == 2:
-                url, initial_code = item
-                initial_status = 'dead'
-            elif len(item) == 3:
-                url, initial_status, initial_code = item
-            else:
-                url = item[0]
-                initial_status = 'dead'
-                initial_code = None
-            
-            if browser_status == 'alive':
-                report['false_positives'] += 1
-                report['false_positive_urls'].append({
-                    'url': url,
-                    'initial_status': initial_status,
-                    'initial_code': initial_code,
-                    'browser_info': browser_info
-                })
-            elif browser_status == 'blocked':
-                report['blocked'] += 1
-                report['blocked_urls'].append({
-                    'url': url,
-                    'browser_info': browser_info
-                })
-            elif browser_status == 'timeout':
-                report['timeout'] += 1
-            elif browser_status == 'error':
-                report['error'] += 1
-            else:
-                report['confirmed_dead'] += 1
-                report['confirmed_dead_urls'].append({
-                    'url': url,
-                    'browser_info': browser_info
-                })
-    
-    return report
-
-
-def print_browser_validation_summary(report: Dict, verbose: bool = False):
-    """Print a summary of browser validation results."""
-    if not verbose:
-        return
-        
-    print(f"\n🔍 Browser Validation Summary")
-    print(f"=" * 40)
-    print(f"Total links checked: {report['total_checked']}")
-    print(f"✅ Confirmed alive (false positives): {report['false_positives']}")
-    print(f"❌ Confirmed dead: {report['confirmed_dead']}")
-    print(f"🚫 Blocked (bot protection): {report['blocked']}")
-    print(f"⏱️  Timeout: {report['timeout']}")
-    print(f"🔌 Error: {report['error']}")
-    
-    if report['false_positives'] > 0:
-        print(f"\n🎉 False Positives Found:")
-        for item in report['false_positive_urls']:
-            print(f"   - {item['url']}")
-            if item['browser_info'].get('final_url'):
-                print(f"     → Redirected to: {item['browser_info']['final_url']}")
-            if item['browser_info'].get('title'):
-                print(f"     → Title: {item['browser_info']['title']}")
 
 
 if __name__ == "__main__":
