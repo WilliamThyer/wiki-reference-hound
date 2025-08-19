@@ -78,11 +78,14 @@ def main():
             print(f"🚀 Parallel processing enabled: {args.max_workers} workers, chunk size: {args.chunk_size} (default)")
         else:
             print(f"🐌 Sequential processing enabled (parallel disabled)")
+        
         if args.browser_validation:
-            print(f"🔍 Browser validation enabled: {args.browser_timeout}s timeout, headless: {not args.no_headless} (default)")
-            print(f"   Max browser validation links: {args.max_browser_links}")
+            if args.verbose:
+                print(f"🔍 Browser validation enabled: {args.browser_timeout}s timeout, headless: {not args.no_headless} (default)")
+                print(f"   Max browser validation links: {args.max_browser_links}")
         else:
-            print(f"🔍 Browser validation disabled")
+            if args.verbose:
+                print(f"🔍 Browser validation disabled")
         if args.references_only:
             print(f"🎯 References-only mode enabled: Only extracting links from references section (default)")
         else:
@@ -264,7 +267,8 @@ def main():
                     browser_results = validate_dead_links_with_browser(
                         dead_for_browser,
                         headless=not args.no_headless,
-                        timeout=args.browser_timeout
+                        timeout=args.browser_timeout,
+                        verbose=args.verbose
                     )
                     
                     # Store browser validation results for this article

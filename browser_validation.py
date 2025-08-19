@@ -8,8 +8,8 @@ import logging
 from typing import List, Tuple, Optional, Dict
 from urllib.parse import urlparse
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+# Configure logging - will be updated based on verbose flag
+logging.basicConfig(level=logging.WARNING)  # Default to WARNING to suppress INFO messages
 logger = logging.getLogger(__name__)
 
 try:
@@ -27,19 +27,33 @@ except ImportError:
     logger.warning("Selenium not available. Install with: pip install selenium")
 
 
+def set_logging_level(verbose: bool = False):
+    """Set the logging level based on verbose flag."""
+    if verbose:
+        logging.getLogger().setLevel(logging.INFO)
+        logger.setLevel(logging.INFO)
+    else:
+        logging.getLogger().setLevel(logging.WARNING)
+        logger.setLevel(logging.WARNING)
+
+
 class BrowserValidator:
     """Browser-based validator for detecting false positives in dead link detection."""
     
-    def __init__(self, headless: bool = True, timeout: int = 30):
+    def __init__(self, headless: bool = True, timeout: int = 30, verbose: bool = False):
         """Initialize the browser validator."""
         if not SELENIUM_AVAILABLE:
             raise ImportError("Selenium is required for browser validation. Install with: pip install selenium")
         
         self.headless = headless
         self.timeout = timeout
+        self.verbose = verbose
         self.driver = None
         
-    def _create_driver(self) -> webdriver.Chrome:
+        # Set logging level based on verbose flag
+        set_logging_level(verbose)
+        
+    def _create_driver(self) -> 'webdriver.Chrome':
         """Create and configure Chrome WebDriver."""
         options = Options()
         
@@ -83,7 +97,8 @@ class BrowserValidator:
             return driver
         except SessionNotCreatedException as e:
             logger.error(f"Failed to create Chrome driver: {e}")
-            logger.info("Make sure Chrome/Chromium is installed and chromedriver is in PATH")
+            if self.verbose:
+                logger.info("Make sure Chrome/Chromium is installed and chromedriver is in PATH")
             raise
         except Exception as e:
             logger.error(f"Unexpected error creating Chrome driver: {e}")
@@ -101,7 +116,8 @@ class BrowserValidator:
         additional_info = {}
         
         try:
-            logger.info(f"Browser validating: {url}")
+            if self.verbose:
+                logger.info(f"Browser validating: {url}")
             
             # Navigate to the URL
             self.driver.get(url)
@@ -112,7 +128,8 @@ class BrowserValidator:
                     lambda driver: driver.execute_script("return document.readyState") == "complete"
                 )
             except TimeoutException:
-                logger.warning(f"Page load timeout for {url}, checking current state")
+                if self.verbose:
+                    logger.warning(f"Page load timeout for {url}, checking current state")
             
             # Get current URL (after redirects)
             current_url = self.driver.current_url
@@ -181,7 +198,8 @@ class BrowserValidator:
             return url, 'alive', 200, additional_info
             
         except TimeoutException:
-            logger.warning(f"Timeout loading {url}")
+            if self.verbose:
+                logger.warning(f"Timeout loading {url}")
             return url, 'timeout', None, {'error': 'Page load timeout'}
             
         except WebDriverException as e:
@@ -231,7 +249,8 @@ class BrowserValidator:
 
 def validate_dead_links_with_browser(dead_links: List[Tuple[str, str, Optional[int]]], 
                                    headless: bool = True,
-                                   timeout: int = 30) -> List[Tuple[str, str, Optional[int], Dict]]:
+                                   timeout: int = 30,
+                                   verbose: bool = False) -> List[Tuple[str, str, Optional[int], Dict]]:
     """Validate a list of dead links using browser automation."""
     if not SELENIUM_AVAILABLE:
         logger.error("Selenium not available. Cannot perform browser validation.")
@@ -249,7 +268,7 @@ def validate_dead_links_with_browser(dead_links: List[Tuple[str, str, Optional[i
         else:
             urls.append(item[0])
     
-    with BrowserValidator(headless=headless, timeout=timeout) as validator:
+    with BrowserValidator(headless=headless, timeout=timeout, verbose=verbose) as validator:
         return validator.validate_multiple_urls(urls)
 
 
