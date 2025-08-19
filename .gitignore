@@ -3,3 +3,4 @@ __pycache__/*
 test.ipynb
 .DS_Store
 browser_validation_results.txt
+dumps/*

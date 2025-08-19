@@ -216,7 +216,7 @@ def check_all_links_with_archives(links: List[str], archive_groups: Dict[str, Li
 
 
 def check_all_links_with_archives_parallel(links: List[str], archive_groups: Dict[str, List[str]], 
-                                          timeout: float = 5.0, max_workers: int = 20,
+                                          timeout: float = 5.0, max_workers: int = 3,
                                           chunk_size: int = 100) -> List[Tuple[str, str, Optional[int]]]:
     """Check links in parallel using ThreadPoolExecutor."""
     if not links:

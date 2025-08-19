@@ -30,16 +30,16 @@ def main():
                        help='Fetch yesterday\'s top articles instead of all-time (default: all-time)')
     parser.add_argument('--timeout', type=float, default=5.0,
                        help='Request timeout in seconds (default: 5.0)')
-    parser.add_argument('--delay', type=float, default=0.1,
-                       help='Delay between link checks in seconds (default: 0.1)')
+    parser.add_argument('--delay', type=float, default=0.2,
+                       help='Delay between link checks in seconds (default: 0.2)')
     parser.add_argument('--output-dir', type=str, default='output',
                        help='Output directory for reports (default: output)')
     parser.add_argument('--parallel', action='store_true', default=True,
                        help='Enable parallel processing for faster link checking (default: True)')
     parser.add_argument('--no-parallel', action='store_false', dest='parallel',
                        help='Disable parallel processing (default: parallel enabled)')
-    parser.add_argument('--max-workers', type=int, default=50,
-                       help='Maximum number of concurrent workers for parallel processing (default: 50)')
+    parser.add_argument('--max-workers', type=int, default=3,
+                       help='Maximum number of concurrent workers for parallel processing (default: 3)')
     parser.add_argument('--chunk-size', type=int, default=100,
                        help='Number of links to process in each batch for parallel processing (default: 100)')
     # Browser validation arguments

@@ -29,7 +29,7 @@ def get_top_articles(limit: int = 25, verbose: bool = False) -> List[str]:
         url = f"https://wikimedia.org/api/rest_v1/metrics/pageviews/top/en.wikipedia/all-access/{date_str}"
         
         headers = {
-            'User-Agent': 'Wikipedia-Dead-Link-Checker/1.0 (https://github.com/your-repo; your-email@example.com)'
+            'User-Agent': 'Wikipedia-Dead-Link-Checker/1.0 (https://github.com/thyer/wikipedia-dead-ref-finder; thyer@example.com)'
         }
         
         response = requests.get(url, headers=headers, verify=False, timeout=10)
@@ -104,7 +104,7 @@ def get_all_time_top_articles(limit: int = 25, verbose: bool = False) -> List[st
             url = f"https://wikimedia.org/api/rest_v1/metrics/pageviews/top/en.wikipedia/all-access/{year}/{month_str}/{day_str}"
             
             headers = {
-                'User-Agent': 'Wikipedia-Dead-Link-Checker/1.0 (https://github.com/your-repo; your-email@example.com)'
+                'User-Agent': 'Wikipedia-Dead-Link-Checker/1.0 (https://github.com/thyer/wikipedia-dead-ref-finder; thyer@example.com)'
             }
             
             response = requests.get(url, headers=headers, verify=False, timeout=10)

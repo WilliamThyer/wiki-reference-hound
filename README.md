@@ -55,10 +55,10 @@ python main.py [OPTIONS]
 Options:
   --limit N              Number of articles to check (default: 25)
   --timeout SECONDS      Request timeout in seconds (default: 5.0)
-  --delay SECONDS        Delay between link checks (default: 0.1)
+  --delay SECONDS        Delay between link checks (default: 0.2)
   --output-dir DIR       Output directory (default: output)
   --parallel             Enable parallel processing for faster checking
-  --max-workers N        Number of concurrent workers (default: 20)
+  --max-workers N        Number of concurrent workers (default: 3)
   --chunk-size N         Links per batch for parallel processing (default: 100)
   --browser-validation   Enable browser validation for false positive detection
   --browser-timeout N    Browser page load timeout in seconds (default: 30)

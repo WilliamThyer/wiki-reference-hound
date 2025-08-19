@@ -22,7 +22,7 @@ def get_session():
         # Add GZip compression header
         _session.headers.update({
             'Accept-Encoding': 'gzip, deflate',
-            'User-Agent': 'Wikipedia-Dead-Link-Checker/1.0 (https://github.com/your-repo; your-email@example.com)'
+            'User-Agent': 'Wikipedia-Dead-Link-Checker/1.0 (https://github.com/thyer/wikipedia-dead-ref-finder; thyer@example.com)'
         })
         
         # Configure connection pooling
@@ -40,14 +40,14 @@ def get_session():
     
     return _session
 
-def get_article_html_batch(titles: List[str], delay: float = 0.1, verbose: bool = False) -> dict:
+def get_article_html_batch(titles: List[str], delay: float = 0.2, verbose: bool = False) -> dict:
     """
-    Fetch HTML content for multiple Wikipedia articles using individual API calls.
-    This approach is more reliable than trying to batch with pipe separators.
+    Fetch HTML content for multiple Wikipedia articles using Wikimedia REST API.
+    This approach is more efficient and has higher rate limits than the Action API.
     
     Args:
         titles: List of Wikipedia article titles
-        delay: Delay between API calls in seconds
+        delay: Delay between API calls in seconds (default: 0.2s for REST API compliance)
         verbose: Enable verbose output
         
     Returns:
@@ -63,43 +63,24 @@ def get_article_html_batch(titles: List[str], delay: float = 0.1, verbose: bool 
         if verbose:
             print(f"Fetching article {i+1}/{len(titles)}: {title}")
         
-        # MediaWiki API endpoint for individual article
-        url = "https://en.wikipedia.org/w/api.php"
+        # Use Wikimedia REST API endpoint for HTML content (more efficient and higher rate limits)
+        url = f"https://en.wikipedia.org/api/rest_v1/page/html/{title}"
         
-        params = {
-            'action': 'parse',
-            'page': title,
-            'prop': 'text',
-            'formatversion': '2',
-            'format': 'json'
-        }
+        # No query parameters needed for REST API
+        params = {}
         
         try:
             response = session.get(url, params=params, timeout=30)
             response.raise_for_status()
             
-            data = response.json()
+            # REST API returns HTML directly, not JSON
+            html_content = response.text
             
-            # Check for API errors
-            if 'error' in data:
-                if data['error'].get('code') == 'ratelimited':
-                    # Implement exponential backoff for rate limits
-                    wait_time = delay * 2
-                    if verbose:
-                        print(f"⚠️  Rate limited. Waiting {wait_time}s before retry...")
-                    time.sleep(wait_time)
-                    delay = min(delay * 2, 10.0)  # Exponential backoff, max 10s
-                    continue
-                else:
-                    if verbose:
-                        print(f"API Error for '{title}': {data['error']['info']}")
-                    continue
-            
-            # Extract HTML content for the article
-            if 'parse' in data and 'text' in data['parse']:
-                results[title] = data['parse']['text']
+            # Check if we got actual HTML content
+            if html_content and len(html_content) > 100:  # Basic validation that we got content
+                results[title] = html_content
                 if verbose:
-                    print(f"✅ Successfully fetched '{title}' ({len(data['parse']['text'])} characters)")
+                    print(f"✅ Successfully fetched '{title}' ({len(html_content)} characters)")
             else:
                 if verbose:
                     print(f"⚠️  No content found for '{title}'")
