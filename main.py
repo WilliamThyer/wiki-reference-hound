@@ -8,6 +8,7 @@ Checks for dead external links in top Wikipedia articles.
 import argparse
 import time
 import os
+import json
 from typing import Dict, List, Tuple, Optional
 
 from fetch_top_articles import get_top_articles, get_all_time_top_articles
@@ -16,6 +17,65 @@ from extract_references import extract_external_links, extract_external_links_fr
 from check_links import check_all_links_with_archives, check_all_links_with_archives_parallel, print_link_summary
 from generate_report import create_all_references_csv_report, print_report_summary
 from utils import clean_article_title, format_duration
+
+
+def load_popular_articles_from_json(filepath: str, limit: int, verbose: bool = False) -> List[str]:
+    """
+    Load popular articles from a JSON file.
+    
+    Args:
+        filepath: Path to the JSON file containing popular articles
+        limit: Maximum number of articles to return
+        verbose: Whether to print verbose output
+        
+    Returns:
+        List of article titles
+    """
+    try:
+        if verbose:
+            print(f"📁 Loading popular articles from: {filepath}")
+        
+        if not os.path.exists(filepath):
+            if verbose:
+                print(f"❌ File not found: {filepath}")
+            return []
+        
+        with open(filepath, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        if not isinstance(data, list):
+            if verbose:
+                print(f"❌ Invalid JSON format: expected list, got {type(data).__name__}")
+            return []
+        
+        # Extract article titles from the JSON data
+        articles = []
+        for item in data:
+            if isinstance(item, dict) and 'title' in item:
+                articles.append(item['title'])
+            elif isinstance(item, str):
+                # Handle case where items are just strings
+                articles.append(item)
+        
+        if verbose:
+            print(f"📊 Loaded {len(articles)} articles from JSON file")
+        
+        # Limit the number of articles
+        if limit > 0:
+            articles = articles[:limit]
+            if verbose:
+                print(f"📏 Limited to {len(articles)} articles as requested")
+        
+        return articles
+        
+    except json.JSONDecodeError as e:
+        if verbose:
+            print(f"❌ JSON parsing error: {e}")
+        return []
+    except Exception as e:
+        if verbose:
+            print(f"❌ Error loading popular articles: {e}")
+        return []
 
 
 def main():
@@ -28,6 +88,8 @@ def main():
                        help='Fetch top articles of all time instead of yesterday\'s top articles (default: True)')
     parser.add_argument('--daily', action='store_false', dest='all_time',
                        help='Fetch yesterday\'s top articles instead of all-time (default: all-time)')
+    parser.add_argument('--use-popular-articles', type=str, default=None,
+                       help='Use articles from specified JSON file instead of fetching from API (e.g., output/popular_articles.json)')
     parser.add_argument('--timeout', type=float, default=5.0,
                        help='Request timeout in seconds (default: 5.0)')
     parser.add_argument('--delay', type=float, default=0.2,
@@ -69,7 +131,10 @@ def main():
     if args.verbose:
         print("🔍 Wikipedia Dead Link Checker")
         print("=" * 40)
-        if args.all_time:
+        if args.use_popular_articles:
+            print(f"📊 Using articles from: {args.use_popular_articles}")
+            print(f"📏 Will check up to {args.limit} articles")
+        elif args.all_time:
             print(f"📊 Checking top {args.limit} articles of all time (default)")
         else:
             print(f"📊 Checking top {args.limit} articles from yesterday")
@@ -100,8 +165,12 @@ def main():
     
     # Step 1: Fetch top articles
     if args.verbose:
-        print("📰 Fetching top articles...")
-    if args.all_time:
+        print("📰 Fetching articles...")
+    
+    if args.use_popular_articles:
+        # Load articles from JSON file
+        articles = load_popular_articles_from_json(args.use_popular_articles, args.limit, args.verbose)
+    elif args.all_time:
         articles = get_all_time_top_articles(limit=args.limit, verbose=args.verbose)
     else:
         articles = get_top_articles(limit=args.limit, verbose=args.verbose)
