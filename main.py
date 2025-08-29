@@ -9,13 +9,14 @@ import argparse
 import time
 import os
 import json
+from datetime import datetime
 from typing import Dict, List, Tuple, Optional
 
 from fetch_top_articles import get_top_articles, get_all_time_top_articles
 from fetch_article_html import get_article_html, get_article_html_batch
 from extract_references import extract_external_links, extract_external_links_from_references, filter_links_for_checking, get_references_with_archives
 from check_links import check_all_links_with_archives, check_all_links_with_archives_parallel, print_link_summary
-from generate_report import create_all_references_csv_report, print_report_summary
+from generate_report import create_all_references_csv_report, print_report_summary, write_article_to_csv, create_csv_file_header
 from utils import clean_article_title, format_duration
 
 
@@ -183,9 +184,20 @@ def main():
         print(f"✅ Found {len(articles)} articles to check")
         print()
     
-    # Step 2: Process articles in efficient batches
+    # Step 2: Create CSV file header for per-article writing
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    csv_filename = f"all_references_{timestamp}.csv"
+    csv_filepath = os.path.join(args.output_dir, csv_filename)
+    
+    # Ensure output directory exists
+    os.makedirs(args.output_dir, exist_ok=True)
+    
+    # Create CSV file with header
+    create_csv_file_header(csv_filepath, verbose=args.verbose)
+    
     if args.verbose:
-        print("🔍 Processing articles in batches...")
+        print(f"\n📄 CSV file created: {csv_filepath}")
+        print(f"   📝 Will write data per article as processing completes")
     
     # Process articles in chunks to manage memory
     chunk_size = 50  # Process 50 articles at a time
@@ -197,7 +209,6 @@ def main():
     # Track progress and memory usage
     import gc
     import psutil
-    import os
     
     def get_memory_usage():
         """Get current memory usage in MB."""
@@ -373,24 +384,18 @@ def main():
                 if args.verbose:
                     print(f"      📦 Found {len(archived)} archived links (skipped during checking)")
                 total_archived_links += len(archived)
-        
-        # Generate report for this chunk immediately
-        if args.verbose:
-            print(f"   📋 Generating report for batch {chunk_start//chunk_size + 1}...")
-        
-        # Create the comprehensive CSV for this chunk
-        chunk_csv_filepath = create_all_references_csv_report(
-            chunk_all_links, 
-            chunk_archive_groups, 
-            chunk_link_results,
-            chunk_browser_results, 
-            args.output_dir,
-            batch_number=chunk_start//chunk_size + 1,
-            verbose=args.verbose
-        )
-        
-        if args.verbose:
-            print(f"   📄 Batch {chunk_start//chunk_size + 1} CSV report saved to: {chunk_csv_filepath}")
+            
+            # Write this article's data to CSV immediately
+            write_article_to_csv(
+                clean_title,
+                article_links,
+                archive_groups,
+                results,
+                chunk_browser_results.get(clean_title, {}),
+                csv_filepath,
+                timestamp,
+                verbose=args.verbose
+            )
         
         # Merge chunk results into main results
         dead_links.update(chunk_dead_links)
@@ -415,21 +420,9 @@ def main():
     if args.verbose:
         print(f"\n✅ All {len(articles)} articles processed in batches!")
         print(f"💾 Final memory usage: {get_memory_usage():.1f} MB")
+        print(f"📄 CSV report completed: {csv_filepath}")
     
-    # Step 3: Generate final summary report (optional)
-    if args.verbose:
-        print("📋 Generating final summary report...")
-    
-    # Create a final summary CSV combining all batches if needed
-    if args.output_dir and os.path.exists(args.output_dir):
-        batch_files = [f for f in os.listdir(args.output_dir) if f.startswith('all_references_batch_') and f.endswith('.csv')]
-        if batch_files:
-            if args.verbose:
-                print(f"📄 Generated {len(batch_files)} batch reports in {args.output_dir}")
-                print(f"   Each batch contains up to {chunk_size} articles")
-                print(f"   Combine them manually or use a data analysis tool to merge")
-    
-    # Step 4: Print final summary
+    # Step 3: Print final summary
     end_time = time.time()
     duration = end_time - start_time
     
